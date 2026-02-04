@@ -1,4 +1,5 @@
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ParsedMessage, ContentBlock } from "~/lib/types";
 import { formatModelName } from "~/lib/format";
 import { ThinkingBlock } from "./ThinkingBlock";
@@ -18,7 +19,7 @@ function renderContentBlock(block: ContentBlock, index: number, subagentCtx?: Su
     case "text":
       return (
         <div key={index} className="prose prose-sm max-w-none text-ink">
-          <Markdown>{block.text}</Markdown>
+          <Markdown remarkPlugins={[remarkGfm]}>{block.text}</Markdown>
         </div>
       );
     case "tool_use": {
