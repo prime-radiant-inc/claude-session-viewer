@@ -1,8 +1,11 @@
+import { useState, useCallback } from "react";
 import { useLoaderData, Link } from "react-router";
 import type { Route } from "./+types/sessions.$projectId.$sessionId";
 import { AppShell } from "~/components/layout/AppShell";
-import { MessageBlock } from "~/components/session/MessageBlock";
+import { InfiniteMessageList } from "~/components/session/InfiniteMessageList";
+import { ConversationMinimap } from "~/components/session/ConversationMinimap";
 import { getDb } from "~/lib/db.server";
+import { estimateContentLength } from "~/lib/minimap";
 import { parseSessionFile, buildConversationThread, readSubagentFirstPrompt } from "~/lib/parser.server";
 import { discoverSubagents } from "~/lib/scanner.server";
 
@@ -13,12 +16,8 @@ export function meta({ data }: Route.MetaArgs) {
   return [{ title }];
 }
 
-const PAGE_SIZE = 200;
-
-export async function loader({ params, request }: Route.LoaderArgs) {
+export async function loader({ params }: Route.LoaderArgs) {
   const { projectId, sessionId } = params;
-  const url = new URL(request.url);
-  const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
   const db = getDb();
 
   const session = db.prepare(`
@@ -93,10 +92,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     }
   }
 
-  const totalMessages = messages.length;
-  const paginatedMessages = messages.slice(0, page * PAGE_SIZE);
-  const hasMore = totalMessages > page * PAGE_SIZE;
-
   return {
     sessionId,
     projectId,
@@ -105,74 +100,81 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     created: session.created,
     modified: session.modified,
     gitBranch: session.git_branch,
-    messages: paginatedMessages,
+    messages,
     subagents,
     subagentMap,
     totalInput,
     totalOutput,
-    page,
-    hasMore,
-    totalMessages,
+    contentLengths: messages.map((m) => estimateContentLength(m.content)),
   };
 }
 
 export default function SessionDetail() {
   const data = useLoaderData<typeof loader>();
+  const [viewportTop, setViewportTop] = useState(0);
+  const [viewportBottom, setViewportBottom] = useState(0.1);
+  const [scrollToIndex, setScrollToIndex] = useState<number | null>(null);
+
+  const handleViewportChange = useCallback((top: number, bottom: number) => {
+    setViewportTop(top);
+    setViewportBottom(bottom);
+  }, []);
+
+  const handleScrollComplete = useCallback(() => {
+    setScrollToIndex(null);
+  }, []);
 
   return (
     <AppShell>
-      <div className="max-w-4xl mx-auto px-6 py-6">
-        {/* Back link */}
-        <Link to={`/?project=${data.projectId}`} className="link-back inline-block mb-4">
-          &larr; Back to sessions
-        </Link>
+      <div className="pr-16">
+        <div className="max-w-4xl mx-auto px-6 py-6">
+          {/* Back link */}
+          <Link to={`/?project=${data.projectId}`} className="link-back inline-block mb-4">
+            &larr; Back to sessions
+          </Link>
 
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="heading-display text-xl mb-2">
-            {data.firstPrompt || "Session"}
-          </h1>
-          {data.summary && (
-            <p className="text-sm text-slate mb-3">{data.summary}</p>
-          )}
-          <div className="flex items-center gap-4 text-xs text-slate">
-            {data.gitBranch && (
-              <span className="bg-panel px-1.5 py-0.5 rounded">{data.gitBranch}</span>
+          {/* Header */}
+          <div className="mb-6">
+            <h1 className="heading-display text-xl mb-2">
+              {data.firstPrompt || "Session"}
+            </h1>
+            {data.summary && (
+              <p className="text-sm text-slate mb-3">{data.summary}</p>
             )}
-            <span>{data.totalMessages} messages</span>
-            {data.subagents.length > 0 && (
-              <span className="text-teal">
-                {data.subagents.length} subagent{data.subagents.length !== 1 ? "s" : ""}
-              </span>
-            )}
-            <span>{(data.totalInput + data.totalOutput).toLocaleString()} tokens</span>
+            <div className="flex items-center gap-4 text-xs text-slate">
+              {data.gitBranch && (
+                <span className="bg-panel px-1.5 py-0.5 rounded">{data.gitBranch}</span>
+              )}
+              <span>{data.messages.length} messages</span>
+              {data.subagents.length > 0 && (
+                <span className="text-teal">
+                  {data.subagents.length} subagent{data.subagents.length !== 1 ? "s" : ""}
+                </span>
+              )}
+              <span>{(data.totalInput + data.totalOutput).toLocaleString()} tokens</span>
+            </div>
           </div>
-        </div>
 
-        {/* Conversation thread */}
-        <div className="space-y-4">
-          {data.messages.map((message) => (
-            <MessageBlock
-              key={message.uuid}
-              message={message}
-              subagentMap={data.subagentMap}
-              projectId={data.projectId}
-              sessionId={data.sessionId}
-            />
-          ))}
+          {/* Conversation thread */}
+          <InfiniteMessageList
+            messages={data.messages}
+            subagentMap={data.subagentMap}
+            projectId={data.projectId}
+            sessionId={data.sessionId}
+            onViewportChange={handleViewportChange}
+            scrollToIndex={scrollToIndex}
+            onScrollComplete={handleScrollComplete}
+          />
         </div>
-
-        {data.hasMore && (
-          <div className="text-center py-4">
-            <Link
-              to={`/sessions/${data.projectId}/${data.sessionId}?page=${data.page + 1}`}
-              className="btn-primary inline-block"
-            >
-              Load more messages ({data.totalMessages - data.messages.length} remaining)
-            </Link>
-          </div>
-        )}
       </div>
+
+      <ConversationMinimap
+        messages={data.messages}
+        contentLengths={data.contentLengths}
+        viewportTop={viewportTop}
+        viewportBottom={viewportBottom}
+        onClickPosition={(index) => setScrollToIndex(index)}
+      />
     </AppShell>
   );
 }
