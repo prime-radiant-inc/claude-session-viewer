@@ -1,5 +1,8 @@
 import { createRequestHandler } from "@react-router/express";
 import express from "express";
+import { initDb } from "../app/lib/db.server";
+
+await initDb();
 
 export const app = express();
 

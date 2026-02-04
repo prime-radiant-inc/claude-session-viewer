@@ -2,4 +2,6 @@ node_modules/
 build/
 .react-router/
 *.db
+*.db-shm
+*.db-wal
 .env
