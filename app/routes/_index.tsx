@@ -1,4 +1,4 @@
-import { useLoaderData, useSearchParams, Form } from "react-router";
+import { useLoaderData, useSearchParams, useNavigation, Form } from "react-router";
 import type { Route } from "./+types/_index";
 import { AppShell } from "~/components/layout/AppShell";
 import { SessionCard } from "~/components/session/SessionCard";
@@ -32,6 +32,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function Index() {
   const { projects, sessions, projectFilter, query } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigation = useNavigation();
+  const isLoading = navigation.state === "loading";
 
   const totalSessions = projects.reduce((sum, p) => sum + p.sessionCount, 0);
 
@@ -67,7 +69,7 @@ export default function Index() {
         </aside>
 
         {/* Main content */}
-        <div className="flex-1 px-6 py-6">
+        <div className={`flex-1 px-6 py-6 transition-opacity ${isLoading ? "opacity-60" : ""}`}>
           {/* Search */}
           <Form method="get" className="mb-6">
             <input

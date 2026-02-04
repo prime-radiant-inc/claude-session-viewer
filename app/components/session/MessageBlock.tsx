@@ -1,3 +1,4 @@
+import Markdown from "react-markdown";
 import type { ParsedMessage, ContentBlock } from "~/lib/types";
 import { formatModelName } from "~/lib/format";
 import { ThinkingBlock } from "./ThinkingBlock";
@@ -17,9 +18,7 @@ function renderContentBlock(block: ContentBlock, index: number, subagentCtx?: Su
     case "text":
       return (
         <div key={index} className="prose prose-sm max-w-none text-ink">
-          {block.text.split("\n").map((line, i) => (
-            <p key={i} className={line.trim() === "" ? "h-2" : ""}>{line}</p>
-          ))}
+          <Markdown>{block.text}</Markdown>
         </div>
       );
     case "tool_use": {

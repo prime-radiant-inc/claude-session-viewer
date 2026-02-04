@@ -13,8 +13,12 @@ export function meta({ data }: Route.MetaArgs) {
   return [{ title }];
 }
 
-export async function loader({ params }: Route.LoaderArgs) {
+const PAGE_SIZE = 200;
+
+export async function loader({ params, request }: Route.LoaderArgs) {
   const { projectId, sessionId } = params;
+  const url = new URL(request.url);
+  const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
   const db = getDb();
 
   const session = db.prepare(`
@@ -89,6 +93,10 @@ export async function loader({ params }: Route.LoaderArgs) {
     }
   }
 
+  const totalMessages = messages.length;
+  const paginatedMessages = messages.slice(0, page * PAGE_SIZE);
+  const hasMore = totalMessages > page * PAGE_SIZE;
+
   return {
     sessionId,
     projectId,
@@ -97,11 +105,14 @@ export async function loader({ params }: Route.LoaderArgs) {
     created: session.created,
     modified: session.modified,
     gitBranch: session.git_branch,
-    messages,
+    messages: paginatedMessages,
     subagents,
     subagentMap,
     totalInput,
     totalOutput,
+    page,
+    hasMore,
+    totalMessages,
   };
 }
 
@@ -128,7 +139,7 @@ export default function SessionDetail() {
             {data.gitBranch && (
               <span className="bg-panel px-1.5 py-0.5 rounded">{data.gitBranch}</span>
             )}
-            <span>{data.messages.length} messages</span>
+            <span>{data.totalMessages} messages</span>
             {data.subagents.length > 0 && (
               <span className="text-teal">
                 {data.subagents.length} subagent{data.subagents.length !== 1 ? "s" : ""}
@@ -150,6 +161,17 @@ export default function SessionDetail() {
             />
           ))}
         </div>
+
+        {data.hasMore && (
+          <div className="text-center py-4">
+            <Link
+              to={`/sessions/${data.projectId}/${data.sessionId}?page=${data.page + 1}`}
+              className="btn-primary inline-block"
+            >
+              Load more messages ({data.totalMessages - data.messages.length} remaining)
+            </Link>
+          </div>
+        )}
       </div>
     </AppShell>
   );
