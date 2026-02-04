@@ -1,0 +1,88 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/* Superpowers Suite design tokens (from style guide) */
+@theme {
+  --color-ink: #1b2631;
+  --color-ink-light: #374a5e;
+  --color-slate: #6b7c8f;
+  --color-teal: #1a6b5a;
+  --color-teal-light: #d4ece8;
+  --color-teal-wash: #eaf5f2;
+  --color-surface: #f6f8fa;
+  --color-panel: #eef1f5;
+  --color-edge: #e1e4e8;
+  --color-edge-light: #eef1f5;
+
+  --font-display: 'Fraunces', serif;
+  --font-body: 'DM Sans', sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-ink);
+}
+
+/* Component classes per style guide */
+
+.btn-primary {
+  background-color: var(--color-teal);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background-color 0.15s;
+}
+.btn-primary:hover { background-color: color-mix(in srgb, var(--color-teal) 90%, black); }
+.btn-primary:disabled { opacity: 0.5; }
+
+.card {
+  background: white;
+  border: 1px solid var(--color-edge);
+  border-radius: 0.5rem;
+  transition: border-color 0.15s;
+}
+.card:hover { border-color: color-mix(in srgb, var(--color-teal) 40%, transparent); }
+
+.input-field {
+  width: 100%;
+  border: 1px solid var(--color-edge);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+.input-field:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-teal) 30%, transparent);
+  border-color: var(--color-teal);
+}
+.input-field:disabled { opacity: 0.5; }
+
+.heading-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.section-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-slate);
+}
+
+.link-back {
+  font-size: 0.75rem;
+  color: var(--color-slate);
+  transition: color 0.15s;
+}
+.link-back:hover { color: var(--color-ink); }
+
+.link-subtle {
+  font-size: 0.875rem;
+  color: var(--color-slate);
+  transition: color 0.15s;
+}
+.link-subtle:hover { color: var(--color-ink); }
