@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { estimateContentLength, computeBarHeights, hitTestMessageIndex } from "~/lib/minimap";
+import { estimateContentLength, computeBarHeights, hitTestMessageIndex, computeBranchLayout } from "~/lib/minimap";
 
 describe("estimateContentLength", () => {
   it("sums text block lengths", () => {
@@ -85,5 +85,64 @@ describe("hitTestMessageIndex", () => {
 
   it("returns 0 for empty heights", () => {
     expect(hitTestMessageIndex(50, [])).toBe(0);
+  });
+});
+
+describe("computeBranchLayout", () => {
+  it("returns empty for no branch points", () => {
+    expect(computeBranchLayout([100, 100], [])).toEqual([]);
+  });
+
+  it("calculates fork fraction correctly", () => {
+    const mainHeights = [100, 100, 100]; // fork at index 1 = after 200/300 = 0.667
+    const branches = computeBranchLayout(mainHeights, [{
+      messageIndex: 1,
+      forkMessageUuid: "a1",
+      paths: [
+        [{ type: "user", content: [{ type: "text", text: "active" }] }],
+        [{ type: "user", content: [{ type: "text", text: "alt" }] }],
+      ],
+    }]);
+    expect(branches.length).toBe(1);
+    expect(branches[0].forkFraction).toBeCloseTo(0.667, 2);
+  });
+
+  it("skips path 0 (active path)", () => {
+    const branches = computeBranchLayout([100, 100], [{
+      messageIndex: 0,
+      forkMessageUuid: "a1",
+      paths: [
+        [{ type: "user", content: [{ type: "text", text: "active" }] }],
+        [{ type: "assistant", content: [{ type: "text", text: "alt1" }] }],
+        [{ type: "assistant", content: [{ type: "text", text: "alt2" }] }],
+      ],
+    }]);
+    expect(branches.length).toBe(2);
+    expect(branches[0].pathIndex).toBe(1);
+    expect(branches[1].pathIndex).toBe(2);
+  });
+
+  it("returns empty when totalHeight is zero", () => {
+    expect(computeBranchLayout([0, 0], [{
+      messageIndex: 0,
+      forkMessageUuid: "a1",
+      paths: [
+        [{ type: "user", content: [{ type: "text", text: "x" }] }],
+        [{ type: "user", content: [{ type: "text", text: "y" }] }],
+      ],
+    }])).toEqual([]);
+  });
+
+  it("enforces minimum bar fraction of 0.005", () => {
+    const branches = computeBranchLayout([1000, 1000], [{
+      messageIndex: 0,
+      forkMessageUuid: "a1",
+      paths: [
+        [{ type: "user", content: [{ type: "text", text: "active" }] }],
+        [{ type: "assistant", content: [{ type: "text", text: "" }] }],
+      ],
+    }]);
+    expect(branches.length).toBe(1);
+    expect(branches[0].barFractions[0]).toBeGreaterThanOrEqual(0.005);
   });
 });

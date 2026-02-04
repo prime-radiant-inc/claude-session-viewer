@@ -128,6 +128,12 @@ export default function SessionDetail() {
     setPathSelections((prev) => ({ ...prev, [forkUuid]: pathIndex }));
   }, []);
 
+  const handleBranchClick = useCallback((forkUuid: string, pathIndex: number) => {
+    setPathSelections((prev) => ({ ...prev, [forkUuid]: pathIndex }));
+    const bp = data.branchPoints.find((b) => b.forkMessageUuid === forkUuid);
+    if (bp) setScrollToIndex(bp.messageIndex);
+  }, [data.branchPoints]);
+
   const handleViewportChange = useCallback((top: number, bottom: number) => {
     setViewportTop(top);
     setViewportBottom(bottom);
@@ -139,7 +145,7 @@ export default function SessionDetail() {
 
   return (
     <AppShell>
-      <div className="pr-16">
+      <div className="pr-20">
         <div className="max-w-4xl mx-auto px-6 py-6">
           {/* Back link */}
           <Link to={`/?project=${data.projectId}`} className="link-back inline-block mb-4">
@@ -187,9 +193,11 @@ export default function SessionDetail() {
       <ConversationMinimap
         messages={data.messages}
         contentLengths={data.contentLengths}
+        branchPoints={data.branchPoints}
         viewportTop={viewportTop}
         viewportBottom={viewportBottom}
         onClickPosition={(index) => setScrollToIndex(index)}
+        onClickBranch={handleBranchClick}
       />
     </AppShell>
   );
