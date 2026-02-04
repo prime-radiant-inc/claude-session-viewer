@@ -113,7 +113,7 @@ export function getProjects(db: Database.Database): Array<{ dirId: string; name:
     SELECT p.dir_id as dirId, p.name, p.path, COUNT(s.session_id) as sessionCount
     FROM projects p LEFT JOIN sessions s ON s.project_dir_id = p.dir_id
     GROUP BY p.dir_id ORDER BY p.name
-  `).all() as any;
+  `).all() as Array<{ dirId: string; name: string; path: string; sessionCount: number }>;
 }
 
 export function getSessionsByProject(db: Database.Database, projectDirId: string, limit = 100, offset = 0): SessionMeta[] {

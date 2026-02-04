@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getToolPreview, formatModelName } from "~/lib/format.ts";
+import { getToolPreview, formatModelName } from "~/lib/format";
 
 describe("getToolPreview", () => {
   it("returns file_path for Read tool", () => {
