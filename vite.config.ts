@@ -4,6 +4,9 @@ import { defineConfig } from "vite";
 import path from "path";
 
 export default defineConfig({
+  server: {
+    allowedHosts: true,
+  },
   plugins: [tailwindcss(), reactRouter()],
   resolve: {
     alias: { "~": path.resolve(__dirname, "./app") },
