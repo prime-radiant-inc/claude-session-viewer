@@ -6,7 +6,8 @@ import { InfiniteMessageList } from "~/components/session/InfiniteMessageList";
 import { ConversationMinimap } from "~/components/session/ConversationMinimap";
 import { getDb } from "~/lib/db.server";
 import { estimateContentLength } from "~/lib/minimap";
-import { parseSessionFile, buildConversationThread, readSubagentFirstPrompt } from "~/lib/parser.server";
+import { parseSessionFile, readSubagentFirstPrompt } from "~/lib/parser.server";
+import { buildMessageTree, resolveActivePath, getBranchPoints } from "~/lib/tree";
 import { discoverSubagents } from "~/lib/scanner.server";
 
 export function meta({ data }: Route.MetaArgs) {
@@ -46,7 +47,9 @@ export async function loader({ params }: Route.LoaderArgs) {
     .get(projectId) as { path: string } | undefined;
 
   const entries = await parseSessionFile(session.file_path);
-  const messages = buildConversationThread(entries);
+  const roots = buildMessageTree(entries);
+  const messages = resolveActivePath(roots);
+  const branchPoints = getBranchPoints(roots, messages);
 
   const subagentFiles = project
     ? await discoverSubagents(project.path, sessionId!)
@@ -101,6 +104,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     modified: session.modified,
     gitBranch: session.git_branch,
     messages,
+    branchPoints,
     subagents,
     subagentMap,
     totalInput,
