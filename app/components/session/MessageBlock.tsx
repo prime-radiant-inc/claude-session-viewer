@@ -2,8 +2,15 @@ import type { ParsedMessage, ContentBlock } from "~/lib/types";
 import { formatModelName } from "~/lib/format";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCallBlock } from "./ToolCallBlock";
+import { SubagentPanel } from "./SubagentPanel";
 
-function renderContentBlock(block: ContentBlock, index: number) {
+interface SubagentContext {
+  subagentMap: Record<string, string>;
+  projectId: string;
+  sessionId: string;
+}
+
+function renderContentBlock(block: ContentBlock, index: number, subagentCtx?: SubagentContext) {
   switch (block.type) {
     case "thinking":
       return <ThinkingBlock key={index} content={block.thinking} />;
@@ -15,8 +22,24 @@ function renderContentBlock(block: ContentBlock, index: number) {
           ))}
         </div>
       );
-    case "tool_use":
-      return <ToolCallBlock key={index} name={block.name} id={block.id} input={block.input} />;
+    case "tool_use": {
+      const agentId = block.name === "Task" && subagentCtx
+        ? subagentCtx.subagentMap[block.id]
+        : undefined;
+      return (
+        <div key={index}>
+          <ToolCallBlock name={block.name} id={block.id} input={block.input} />
+          {agentId && subagentCtx && (
+            <SubagentPanel
+              projectId={subagentCtx.projectId}
+              sessionId={subagentCtx.sessionId}
+              agentId={agentId}
+              description={String((block.input as Record<string, unknown>).description || "")}
+            />
+          )}
+        </div>
+      );
+    }
     case "tool_result":
       return (
         <details key={index} className="group">
@@ -35,13 +58,24 @@ function renderContentBlock(block: ContentBlock, index: number) {
   }
 }
 
-export function MessageBlock({ message }: { message: ParsedMessage }) {
+interface MessageBlockProps {
+  message: ParsedMessage;
+  subagentMap?: Record<string, string>;
+  projectId?: string;
+  sessionId?: string;
+}
+
+export function MessageBlock({ message, subagentMap, projectId, sessionId }: MessageBlockProps) {
   const isUser = message.type === "user";
+
+  const subagentCtx = subagentMap && projectId && sessionId
+    ? { subagentMap, projectId, sessionId }
+    : undefined;
 
   if (message.isToolResult) {
     return (
       <div className="pl-4 border-l-2 border-edge-light">
-        {message.content.map((block, i) => renderContentBlock(block, i))}
+        {message.content.map((block, i) => renderContentBlock(block, i, subagentCtx))}
       </div>
     );
   }
@@ -60,7 +94,7 @@ export function MessageBlock({ message }: { message: ParsedMessage }) {
 
       {/* Content blocks */}
       <div className="space-y-2">
-        {message.content.map((block, i) => renderContentBlock(block, i))}
+        {message.content.map((block, i) => renderContentBlock(block, i, subagentCtx))}
       </div>
     </div>
   );

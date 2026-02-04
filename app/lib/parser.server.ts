@@ -83,6 +83,44 @@ export function extractSummary(entries: RawLogEntry[]): string | undefined {
   return entries.findLast((e) => e.type === "summary")?.summary;
 }
 
+// Read the first user message content from a subagent file (for mapping to parent Task tool_use)
+export async function readSubagentFirstPrompt(filePath: string): Promise<string | null> {
+  try {
+    await access(filePath);
+  } catch {
+    return null;
+  }
+
+  const rl = createInterface({
+    input: createReadStream(filePath, { encoding: "utf-8" }),
+    crlfDelay: Infinity,
+  });
+
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    try {
+      const entry = JSON.parse(line) as RawLogEntry;
+      if (entry.type !== "user" || !entry.message) continue;
+      const content = entry.message.content;
+      if (typeof content === "string") {
+        rl.close();
+        return content;
+      }
+      if (Array.isArray(content)) {
+        const text = content.find((b) => b.type === "text");
+        if (text?.type === "text") {
+          rl.close();
+          return text.text;
+        }
+      }
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  return null;
+}
+
 export function extractFirstPrompt(entries: RawLogEntry[]): string {
   for (const entry of entries) {
     if (entry.type !== "user" || entry.isMeta) continue;

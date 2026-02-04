@@ -3,7 +3,7 @@ import type { Route } from "./+types/sessions.$projectId.$sessionId";
 import { AppShell } from "~/components/layout/AppShell";
 import { MessageBlock } from "~/components/session/MessageBlock";
 import { getDb } from "~/lib/db.server";
-import { parseSessionFile, buildConversationThread } from "~/lib/parser.server";
+import { parseSessionFile, buildConversationThread, readSubagentFirstPrompt } from "~/lib/parser.server";
 import { discoverSubagents } from "~/lib/scanner.server";
 
 export function meta({ data }: Route.MetaArgs) {
@@ -53,6 +53,33 @@ export async function loader({ params }: Route.LoaderArgs) {
     filePath: s.filePath,
   }));
 
+  // Build tool_use_id -> agentId mapping by matching Task prompts to subagent first messages
+  const subagentMap: Record<string, string> = {};
+  if (subagentFiles.length > 0) {
+    // Collect Task tool_use prompts from session messages
+    const taskPrompts: Array<{ toolUseId: string; prompt: string }> = [];
+    for (const msg of messages) {
+      for (const block of msg.content) {
+        if (block.type === "tool_use" && block.name === "Task") {
+          const prompt = (block.input as Record<string, unknown>).prompt;
+          if (typeof prompt === "string") {
+            taskPrompts.push({ toolUseId: block.id, prompt });
+          }
+        }
+      }
+    }
+
+    // Read first prompt from each subagent file and match
+    for (const sub of subagentFiles) {
+      const firstPrompt = await readSubagentFirstPrompt(sub.filePath);
+      if (!firstPrompt) continue;
+      const match = taskPrompts.find((tp) => tp.prompt === firstPrompt);
+      if (match) {
+        subagentMap[match.toolUseId] = sub.agentId;
+      }
+    }
+  }
+
   let totalInput = 0;
   let totalOutput = 0;
   for (const msg of messages) {
@@ -72,6 +99,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     gitBranch: session.git_branch,
     messages,
     subagents,
+    subagentMap,
     totalInput,
     totalOutput,
   };
@@ -113,7 +141,13 @@ export default function SessionDetail() {
         {/* Conversation thread */}
         <div className="space-y-4">
           {data.messages.map((message) => (
-            <MessageBlock key={message.uuid} message={message} />
+            <MessageBlock
+              key={message.uuid}
+              message={message}
+              subagentMap={data.subagentMap}
+              projectId={data.projectId}
+              sessionId={data.sessionId}
+            />
           ))}
         </div>
       </div>
