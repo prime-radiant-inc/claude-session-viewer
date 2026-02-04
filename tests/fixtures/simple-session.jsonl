@@ -1,0 +1,4 @@
+{"type":"user","uuid":"u1","parentUuid":null,"sessionId":"s1","timestamp":"2026-01-21T10:00:00Z","isSidechain":false,"message":{"role":"user","content":"What is 2+2?"},"thinkingMetadata":{"level":"high"}}
+{"type":"assistant","uuid":"a1","parentUuid":"u1","sessionId":"s1","timestamp":"2026-01-21T10:00:01Z","isSidechain":false,"message":{"role":"assistant","content":[{"type":"thinking","thinking":"Simple math.","signature":"sig1"},{"type":"text","text":"2+2 equals 4."}],"model":"claude-opus-4-5-20251101","usage":{"input_tokens":10,"output_tokens":5}}}
+{"type":"system","uuid":"sys1","parentUuid":"a1","sessionId":"s1","timestamp":"2026-01-21T10:00:02Z","isSidechain":false,"subtype":"turn_duration","durationMs":1500}
+{"type":"summary","summary":"Simple math question","leafUuid":"a1"}
