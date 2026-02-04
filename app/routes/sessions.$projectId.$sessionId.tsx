@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useLoaderData, Link } from "react-router";
 import type { Route } from "./+types/sessions.$projectId.$sessionId";
 import { AppShell } from "~/components/layout/AppShell";
@@ -118,6 +118,15 @@ export default function SessionDetail() {
   const [viewportTop, setViewportTop] = useState(0);
   const [viewportBottom, setViewportBottom] = useState(0.1);
   const [scrollToIndex, setScrollToIndex] = useState<number | null>(null);
+  const [pathSelections, setPathSelections] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    setPathSelections({});
+  }, [data.sessionId]);
+
+  const handlePathSwitch = useCallback((forkUuid: string, pathIndex: number) => {
+    setPathSelections((prev) => ({ ...prev, [forkUuid]: pathIndex }));
+  }, []);
 
   const handleViewportChange = useCallback((top: number, bottom: number) => {
     setViewportTop(top);
@@ -162,6 +171,9 @@ export default function SessionDetail() {
           {/* Conversation thread */}
           <InfiniteMessageList
             messages={data.messages}
+            branchPoints={data.branchPoints}
+            pathSelections={pathSelections}
+            onPathSwitch={handlePathSwitch}
             subagentMap={data.subagentMap}
             projectId={data.projectId}
             sessionId={data.sessionId}
