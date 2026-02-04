@@ -16,10 +16,17 @@ export interface BranchPoint {
  * Filters to user/assistant types, skips isMeta and entries without uuid/message.
  */
 export function buildMessageTree(entries: RawLogEntry[]): MessageNode[] {
+  // Full uuid lookup for ALL entries (needed to follow parent chains through
+  // progress/system messages that get filtered from the tree)
+  const allEntriesByUuid = new Map<string, RawLogEntry>();
+  for (const entry of entries) {
+    if (entry.uuid) allEntriesByUuid.set(entry.uuid, entry);
+  }
+
   const nodesByUuid = new Map<string, MessageNode>();
   const roots: MessageNode[] = [];
 
-  // First pass: create nodes for all valid entries
+  // First pass: create nodes for user/assistant entries only
   for (const entry of entries) {
     if (entry.type !== "user" && entry.type !== "assistant") continue;
     if (!entry.uuid || !entry.message) continue;
@@ -32,12 +39,25 @@ export function buildMessageTree(entries: RawLogEntry[]): MessageNode[] {
     nodesByUuid.set(entry.uuid, node);
   }
 
-  // Second pass: wire up parent-child relationships
+  // Second pass: wire up parent-child relationships.
+  // Follow parent chains through filtered-out entries (progress, system, etc.)
+  // until finding a user/assistant ancestor or reaching a root.
   for (const [, node] of nodesByUuid) {
-    const parentUuid = node.entry.parentUuid;
-    if (parentUuid && nodesByUuid.has(parentUuid)) {
-      nodesByUuid.get(parentUuid)!.children.push(node);
-    } else {
+    let parentUuid = node.entry.parentUuid;
+    let foundParent = false;
+
+    while (parentUuid) {
+      if (nodesByUuid.has(parentUuid)) {
+        nodesByUuid.get(parentUuid)!.children.push(node);
+        foundParent = true;
+        break;
+      }
+      // Parent is a filtered-out entry -- follow its parentUuid chain
+      const parentEntry = allEntriesByUuid.get(parentUuid);
+      parentUuid = parentEntry?.parentUuid ?? null;
+    }
+
+    if (!foundParent) {
       roots.push(node);
     }
   }
