@@ -1,0 +1,122 @@
+import { useLoaderData, Link } from "react-router";
+import type { Route } from "./+types/sessions.$projectId.$sessionId";
+import { AppShell } from "~/components/layout/AppShell";
+import { MessageBlock } from "~/components/session/MessageBlock";
+import { getDb } from "~/lib/db.server";
+import { parseSessionFile, buildConversationThread } from "~/lib/parser.server";
+import { discoverSubagents } from "~/lib/scanner.server";
+
+export function meta({ data }: Route.MetaArgs) {
+  const title = data?.firstPrompt
+    ? `${data.firstPrompt.slice(0, 60)} | Sessions`
+    : "Session | Sessions";
+  return [{ title }];
+}
+
+export async function loader({ params }: Route.LoaderArgs) {
+  const { projectId, sessionId } = params;
+  const db = getDb();
+
+  const session = db.prepare(`
+    SELECT session_id, project_dir_id, file_path, first_prompt, summary,
+           message_count, subagent_count, created, modified, git_branch, project_path
+    FROM sessions WHERE session_id = ?
+  `).get(sessionId) as {
+    session_id: string;
+    project_dir_id: string;
+    file_path: string;
+    first_prompt: string;
+    summary: string;
+    message_count: number;
+    subagent_count: number;
+    created: string;
+    modified: string;
+    git_branch: string;
+    project_path: string;
+  } | undefined;
+
+  if (!session) {
+    throw new Response("Session not found", { status: 404 });
+  }
+
+  const project = db.prepare("SELECT path FROM projects WHERE dir_id = ?")
+    .get(projectId) as { path: string } | undefined;
+
+  const entries = await parseSessionFile(session.file_path);
+  const messages = buildConversationThread(entries);
+
+  const subagentFiles = project
+    ? await discoverSubagents(project.path, sessionId!)
+    : [];
+  const subagents = subagentFiles.map((s) => ({
+    agentId: s.agentId,
+    filePath: s.filePath,
+  }));
+
+  let totalInput = 0;
+  let totalOutput = 0;
+  for (const msg of messages) {
+    if (msg.usage) {
+      totalInput += msg.usage.input_tokens;
+      totalOutput += msg.usage.output_tokens;
+    }
+  }
+
+  return {
+    sessionId,
+    projectId,
+    firstPrompt: session.first_prompt,
+    summary: session.summary,
+    created: session.created,
+    modified: session.modified,
+    gitBranch: session.git_branch,
+    messages,
+    subagents,
+    totalInput,
+    totalOutput,
+  };
+}
+
+export default function SessionDetail() {
+  const data = useLoaderData<typeof loader>();
+
+  return (
+    <AppShell>
+      <div className="max-w-4xl mx-auto px-6 py-6">
+        {/* Back link */}
+        <Link to={`/?project=${data.projectId}`} className="link-back inline-block mb-4">
+          &larr; Back to sessions
+        </Link>
+
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="heading-display text-xl mb-2">
+            {data.firstPrompt || "Session"}
+          </h1>
+          {data.summary && (
+            <p className="text-sm text-slate mb-3">{data.summary}</p>
+          )}
+          <div className="flex items-center gap-4 text-xs text-slate">
+            {data.gitBranch && (
+              <span className="bg-panel px-1.5 py-0.5 rounded">{data.gitBranch}</span>
+            )}
+            <span>{data.messages.length} messages</span>
+            {data.subagents.length > 0 && (
+              <span className="text-teal">
+                {data.subagents.length} subagent{data.subagents.length !== 1 ? "s" : ""}
+              </span>
+            )}
+            <span>{(data.totalInput + data.totalOutput).toLocaleString()} tokens</span>
+          </div>
+        </div>
+
+        {/* Conversation thread */}
+        <div className="space-y-4">
+          {data.messages.map((message) => (
+            <MessageBlock key={message.uuid} message={message} />
+          ))}
+        </div>
+      </div>
+    </AppShell>
+  );
+}
