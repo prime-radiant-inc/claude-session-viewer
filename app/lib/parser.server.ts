@@ -41,6 +41,7 @@ export function buildConversationThread(entries: RawLogEntry[]): ParsedMessage[]
     const toolResultBlock = content.find((b) => b.type === "tool_result");
     const isToolResult = !!toolResultBlock;
     const toolResultId = toolResultBlock?.type === "tool_result" ? toolResultBlock.tool_use_id : undefined;
+    const isError = toolResultBlock?.type === "tool_result" ? toolResultBlock.is_error ?? false : undefined;
 
     let subagentId: string | undefined;
     let subagentDescription: string | undefined;
@@ -62,6 +63,7 @@ export function buildConversationThread(entries: RawLogEntry[]): ParsedMessage[]
       isSidechain: entry.isSidechain ?? false,
       isToolResult,
       toolResultId,
+      isError,
       subagentId,
       subagentDescription,
     });
@@ -78,7 +80,7 @@ function normalizeContent(content: string | ContentBlock[] | undefined): Content
 }
 
 export function extractSummary(entries: RawLogEntry[]): string | undefined {
-  return entries.find((e) => e.type === "summary")?.summary;
+  return entries.findLast((e) => e.type === "summary")?.summary;
 }
 
 export function extractFirstPrompt(entries: RawLogEntry[]): string {

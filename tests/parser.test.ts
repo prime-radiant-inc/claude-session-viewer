@@ -52,6 +52,7 @@ describe("buildConversationThread", () => {
     expect(thread[1].content.some((b) => b.type === "tool_use")).toBe(true);
     expect(thread[2].isToolResult).toBe(true);
     expect(thread[2].toolResultId).toBe("toolu_01X");
+    expect(thread[2].isError).toBe(false);
   });
 
   it("identifies subagent dispatches", async () => {
@@ -71,6 +72,14 @@ describe("buildConversationThread", () => {
 });
 
 describe("extractSummary", () => {
+  it("returns the last summary when multiple exist", () => {
+    const entries = [
+      { type: "summary" as const, summary: "First summary", leafUuid: "a1" },
+      { type: "summary" as const, summary: "Updated summary", leafUuid: "a2" },
+    ];
+    expect(extractSummary(entries)).toBe("Updated summary");
+  });
+
   it("returns summary text from a session with a summary entry", async () => {
     const entries = await parseSessionFile(path.join(FIXTURES, "simple-session.jsonl"));
     expect(extractSummary(entries)).toBe("Simple math question");
