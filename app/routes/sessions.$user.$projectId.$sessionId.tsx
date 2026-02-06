@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useLoaderData, Link } from "react-router";
-import type { Route } from "./+types/sessions.$projectId.$sessionId";
+import type { Route } from "./+types/sessions.$user.$projectId.$sessionId";
 import { AppShell } from "~/components/layout/AppShell";
 import { InfiniteMessageList } from "~/components/session/InfiniteMessageList";
 import { ConversationMinimap } from "~/components/session/ConversationMinimap";
@@ -18,7 +18,8 @@ export function meta({ data }: Route.MetaArgs) {
 }
 
 export async function loader({ params }: Route.LoaderArgs) {
-  const { projectId, sessionId } = params;
+  const { user, projectId, sessionId } = params;
+  const dirId = `${user}/${projectId}`;
   const db = await ensureInitialized();
 
   const session = db.prepare(`
@@ -44,7 +45,7 @@ export async function loader({ params }: Route.LoaderArgs) {
   }
 
   const project = db.prepare("SELECT path FROM projects WHERE dir_id = ?")
-    .get(projectId) as { path: string } | undefined;
+    .get(dirId) as { path: string } | undefined;
 
   const entries = await parseSessionFile(session.file_path);
   const roots = buildMessageTree(entries);
@@ -97,7 +98,8 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   return {
     sessionId,
-    projectId,
+    projectId: dirId,
+    user,
     firstPrompt: session.first_prompt,
     summary: session.summary,
     created: session.created,
@@ -148,7 +150,7 @@ export default function SessionDetail() {
       <div className="pr-20">
         <div className="max-w-4xl mx-auto px-6 py-6">
           {/* Back link */}
-          <Link to={`/?project=${data.projectId}`} className="link-back inline-block mb-4">
+          <Link to={`/?user=${data.user}&project=${data.projectId}`} className="link-back inline-block mb-4">
             &larr; Back to sessions
           </Link>
 
