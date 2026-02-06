@@ -2,7 +2,7 @@ import { useLoaderData, useSearchParams, useNavigation, Form } from "react-route
 import type { Route } from "./+types/_index";
 import { AppShell } from "~/components/layout/AppShell";
 import { SessionCard } from "~/components/session/SessionCard";
-import { getDb, getProjects, getAllSessions, getSessionsByProject, searchSessions } from "~/lib/db.server";
+import { getDb, getProjects, getUsers, getAllSessions, getSessionsByProject, searchSessions } from "~/lib/db.server";
 import type { SessionMeta } from "~/lib/types";
 
 export function meta() {
@@ -12,40 +12,71 @@ export function meta() {
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const projectFilter = url.searchParams.get("project");
+  const userFilter = url.searchParams.get("user");
   const query = url.searchParams.get("q");
   const db = getDb();
 
-  const projects = getProjects(db);
+  const users = getUsers(db);
+  const projects = getProjects(db, userFilter || undefined);
 
   let sessions: SessionMeta[];
   if (query) {
-    sessions = searchSessions(db, query);
+    sessions = searchSessions(db, query, 50, userFilter || undefined);
   } else if (projectFilter) {
     sessions = getSessionsByProject(db, projectFilter);
   } else {
-    sessions = getAllSessions(db);
+    sessions = getAllSessions(db, 100, 0, userFilter || undefined);
   }
 
-  return { projects, sessions, projectFilter, query };
+  return { users, projects, sessions, projectFilter, userFilter, query };
 }
 
 export default function Index() {
-  const { projects, sessions, projectFilter, query } = useLoaderData<typeof loader>();
+  const { users, projects, sessions, projectFilter, userFilter, query } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const isLoading = navigation.state === "loading";
 
   const totalSessions = projects.reduce((sum, p) => sum + p.sessionCount, 0);
+  const showUserBadge = users.length > 0 && !userFilter;
 
   return (
     <AppShell>
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-64 shrink-0 border-r border-edge bg-white px-4 py-6 min-h-[calc(100vh-49px)]">
+          {/* Users section */}
+          {users.length > 0 && (
+            <>
+              <p className="section-label mb-3">Users</p>
+              <nav className="space-y-1 mb-6">
+                <button
+                  onClick={() => setSearchParams({})}
+                  className={`block w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
+                    !userFilter && !projectFilter && !query ? "bg-teal-wash text-teal font-medium" : "text-slate hover:text-ink"
+                  }`}
+                >
+                  All users
+                </button>
+                {users.map((user) => (
+                  <button
+                    key={user}
+                    onClick={() => setSearchParams({ user })}
+                    className={`block w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
+                      userFilter === user ? "bg-teal-wash text-teal font-medium" : "text-slate hover:text-ink"
+                    }`}
+                  >
+                    {user}
+                  </button>
+                ))}
+              </nav>
+            </>
+          )}
+
           <p className="section-label mb-3">Projects</p>
           <nav className="space-y-1">
             <button
-              onClick={() => setSearchParams({})}
+              onClick={() => setSearchParams(userFilter ? { user: userFilter } : {})}
               className={`block w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
                 !projectFilter && !query ? "bg-teal-wash text-teal font-medium" : "text-slate hover:text-ink"
               }`}
@@ -56,7 +87,7 @@ export default function Index() {
             {projects.map((project) => (
               <button
                 key={project.dirId}
-                onClick={() => setSearchParams({ project: project.dirId })}
+                onClick={() => setSearchParams(userFilter ? { user: userFilter, project: project.dirId } : { project: project.dirId })}
                 className={`block w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
                   projectFilter === project.dirId ? "bg-teal-wash text-teal font-medium" : "text-slate hover:text-ink"
                 }`}
@@ -80,6 +111,7 @@ export default function Index() {
               className="input-field max-w-md"
             />
             {projectFilter && <input type="hidden" name="project" value={projectFilter} />}
+            {userFilter && <input type="hidden" name="user" value={userFilter} />}
           </Form>
 
           {/* Results */}
@@ -88,7 +120,7 @@ export default function Index() {
               <p className="text-slate text-sm">No sessions found.</p>
             ) : (
               sessions.map((session) => (
-                <SessionCard key={session.sessionId} session={session} />
+                <SessionCard key={session.sessionId} session={session} showUser={showUserBadge} />
               ))
             )}
           </div>

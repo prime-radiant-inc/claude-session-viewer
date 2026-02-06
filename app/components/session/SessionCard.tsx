@@ -13,7 +13,7 @@ function formatTime(iso: string): string {
   return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
-export function SessionCard({ session }: { session: SessionMeta }) {
+export function SessionCard({ session, showUser }: { session: SessionMeta; showUser?: boolean }) {
   return (
     <Link
       to={`/sessions/${session.projectId}/${session.sessionId}`}
@@ -34,6 +34,11 @@ export function SessionCard({ session }: { session: SessionMeta }) {
         </div>
       </div>
       <div className="flex items-center gap-3 mt-2">
+        {showUser && session.user && (
+          <span className="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+            {session.user}
+          </span>
+        )}
         {session.gitBranch && (
           <span className="text-xs text-slate bg-panel px-1.5 py-0.5 rounded">
             {session.gitBranch}
