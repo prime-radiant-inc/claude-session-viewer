@@ -27,9 +27,11 @@ if (DEVELOPMENT) {
     }
   });
 } else {
+  const { createRequestHandler } = await import("@react-router/express");
+  const build = await import(BUILD_PATH);
   server.use("/assets", express.static("build/client/assets", { immutable: true, maxAge: "1y" }));
   server.use(express.static("build/client", { maxAge: "1h" }));
-  server.use(await import(BUILD_PATH).then((mod) => mod.app));
+  server.all("*", createRequestHandler({ build }));
 }
 
 server.listen(PORT, () => {

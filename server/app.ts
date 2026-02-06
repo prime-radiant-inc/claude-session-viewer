@@ -1,20 +1,7 @@
 import { createRequestHandler } from "@react-router/express";
 import express from "express";
-import { initDb, rescanDb } from "../app/lib/db.server";
-
-await initDb();
 
 export const app = express();
-
-app.post("/api/rescan", async (_req, res) => {
-  try {
-    await rescanDb();
-    res.json({ ok: true });
-  } catch (err) {
-    console.error("Rescan failed:", err);
-    res.status(500).json({ ok: false, error: String(err) });
-  }
-});
 
 app.all(
   "*",

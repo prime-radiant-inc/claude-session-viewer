@@ -201,10 +201,19 @@ export function searchSessions(db: Database.Database, query: string, limit = 50,
 }
 
 let _db: Database.Database | null = null;
+let _initPromise: Promise<void> | null = null;
 
 export function getDb(): Database.Database {
   if (!_db) { _db = createDb(process.env.DB_PATH || "sessions.db"); }
   return _db;
+}
+
+export async function ensureInitialized(): Promise<Database.Database> {
+  if (!_initPromise) {
+    _initPromise = initDb();
+  }
+  await _initPromise;
+  return getDb();
 }
 
 export function resetDb(db: Database.Database): void {
@@ -225,7 +234,7 @@ async function importDataDir(db: Database.Database, dataDir: string): Promise<vo
   console.log(`Imported ${total} sessions across ${projects.length} projects`);
 }
 
-export async function initDb(): Promise<void> {
+async function initDb(): Promise<void> {
   const dataDir = process.env.DATA_DIR;
   if (!dataDir) throw new Error("DATA_DIR environment variable is required");
   await importDataDir(getDb(), dataDir);
@@ -237,4 +246,5 @@ export async function rescanDb(): Promise<void> {
   const db = getDb();
   resetDb(db);
   await importDataDir(db, dataDir);
+  _initPromise = Promise.resolve();
 }

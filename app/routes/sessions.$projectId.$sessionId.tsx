@@ -4,7 +4,7 @@ import type { Route } from "./+types/sessions.$projectId.$sessionId";
 import { AppShell } from "~/components/layout/AppShell";
 import { InfiniteMessageList } from "~/components/session/InfiniteMessageList";
 import { ConversationMinimap } from "~/components/session/ConversationMinimap";
-import { getDb } from "~/lib/db.server";
+import { ensureInitialized } from "~/lib/db.server";
 import { estimateContentLength } from "~/lib/minimap";
 import { parseSessionFile, readSubagentFirstPrompt } from "~/lib/parser.server";
 import { buildMessageTree, resolveActivePath, getBranchPoints } from "~/lib/tree";
@@ -19,7 +19,7 @@ export function meta({ data }: Route.MetaArgs) {
 
 export async function loader({ params }: Route.LoaderArgs) {
   const { projectId, sessionId } = params;
-  const db = getDb();
+  const db = await ensureInitialized();
 
   const session = db.prepare(`
     SELECT session_id, project_dir_id, file_path, first_prompt, summary,

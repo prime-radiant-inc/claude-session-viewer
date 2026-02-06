@@ -2,7 +2,7 @@ import { useLoaderData, useSearchParams, useNavigation, Form } from "react-route
 import type { Route } from "./+types/_index";
 import { AppShell } from "~/components/layout/AppShell";
 import { SessionCard } from "~/components/session/SessionCard";
-import { getDb, getProjects, getUsers, getAllSessions, getSessionsByProject, searchSessions } from "~/lib/db.server";
+import { ensureInitialized, getProjects, getUsers, getAllSessions, getSessionsByProject, searchSessions } from "~/lib/db.server";
 import type { SessionMeta } from "~/lib/types";
 
 export function meta() {
@@ -14,7 +14,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const projectFilter = url.searchParams.get("project");
   const userFilter = url.searchParams.get("user");
   const query = url.searchParams.get("q");
-  const db = getDb();
+  const db = await ensureInitialized();
 
   const users = getUsers(db);
   const projects = getProjects(db, userFilter || undefined);
