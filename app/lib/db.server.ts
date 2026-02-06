@@ -207,10 +207,16 @@ export function getDb(): Database.Database {
   return _db;
 }
 
+export function resetDb(db: Database.Database): void {
+  db.exec("DELETE FROM sessions");
+  db.exec("DELETE FROM projects");
+}
+
 export async function initDb(): Promise<void> {
   const dataDir = process.env.DATA_DIR;
   if (!dataDir) throw new Error("DATA_DIR environment variable is required");
   const db = getDb();
+  resetDb(db);
   const layout = await detectLayout(dataDir);
   console.log(`Importing sessions from ${dataDir} (${layout} layout)`);
   if (layout === "multi-user") {
