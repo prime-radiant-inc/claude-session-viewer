@@ -82,6 +82,45 @@ export async function readSessionsIndex(projectPath: string): Promise<SessionsIn
   }
 }
 
+// =============================================================================
+// Multi-user layout discovery
+// =============================================================================
+
+export type DataLayout = "single-user" | "multi-user";
+
+export async function detectLayout(dataDir: string): Promise<DataLayout> {
+  const entries = await readdir(dataDir, { withFileTypes: true });
+  const dirs = entries.filter((e) => e.isDirectory());
+  if (dirs.length === 0) return "single-user";
+  // If any directory starts with "-", it's the old encoded-path layout
+  return dirs.some((d) => d.name.startsWith("-")) ? "single-user" : "multi-user";
+}
+
+export async function discoverUsers(dataDir: string): Promise<string[]> {
+  const entries = await readdir(dataDir, { withFileTypes: true });
+  return entries
+    .filter((e) => e.isDirectory() && !e.name.startsWith("-") && !e.name.startsWith("."))
+    .map((e) => e.name)
+    .sort();
+}
+
+export async function discoverUserProjects(userDir: string): Promise<ProjectInfo[]> {
+  const userName = path.basename(userDir);
+  const entries = await readdir(userDir, { withFileTypes: true });
+  const projects: ProjectInfo[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    projects.push({
+      dirId: `${userName}/${entry.name}`,
+      name: entry.name,
+      path: path.join(userDir, entry.name),
+    });
+  }
+
+  return projects.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function discoverSubagents(projectPath: string, sessionId: string): Promise<SubagentFileInfo[]> {
   const subagentDir = path.join(projectPath, sessionId, "subagents");
   try { await access(subagentDir); } catch { return []; }
