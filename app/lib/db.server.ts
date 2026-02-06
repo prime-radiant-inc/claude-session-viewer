@@ -212,11 +212,7 @@ export function resetDb(db: Database.Database): void {
   db.exec("DELETE FROM projects");
 }
 
-export async function initDb(): Promise<void> {
-  const dataDir = process.env.DATA_DIR;
-  if (!dataDir) throw new Error("DATA_DIR environment variable is required");
-  const db = getDb();
-  resetDb(db);
+async function importDataDir(db: Database.Database, dataDir: string): Promise<void> {
   const layout = await detectLayout(dataDir);
   console.log(`Importing sessions from ${dataDir} (${layout} layout)`);
   if (layout === "multi-user") {
@@ -227,4 +223,18 @@ export async function initDb(): Promise<void> {
   const projects = getProjects(db);
   const total = projects.reduce((sum, p) => sum + p.sessionCount, 0);
   console.log(`Imported ${total} sessions across ${projects.length} projects`);
+}
+
+export async function initDb(): Promise<void> {
+  const dataDir = process.env.DATA_DIR;
+  if (!dataDir) throw new Error("DATA_DIR environment variable is required");
+  await importDataDir(getDb(), dataDir);
+}
+
+export async function rescanDb(): Promise<void> {
+  const dataDir = process.env.DATA_DIR;
+  if (!dataDir) throw new Error("DATA_DIR environment variable is required");
+  const db = getDb();
+  resetDb(db);
+  await importDataDir(db, dataDir);
 }

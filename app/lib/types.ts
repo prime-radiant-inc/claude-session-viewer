@@ -101,7 +101,7 @@ export interface SessionMeta {
   gitBranch: string;
   projectPath: string;
   subagentCount: number;
-  user?: string;
+  user: string;
 }
 
 export interface ParsedMessage {
