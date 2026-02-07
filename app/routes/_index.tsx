@@ -105,7 +105,7 @@ export default function Index() {
           )}
 
           {/* Hosts section */}
-          {hosts.length > 1 && userFilter && (
+          {hosts.length > 0 && userFilter && (
             <>
               <p className="section-label mb-3">Hosts</p>
               <nav className="space-y-1 mb-6">
