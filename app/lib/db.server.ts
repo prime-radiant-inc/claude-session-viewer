@@ -216,11 +216,6 @@ export async function ensureInitialized(): Promise<Database.Database> {
   return getDb();
 }
 
-export function resetDb(db: Database.Database): void {
-  db.exec("DELETE FROM sessions");
-  db.exec("DELETE FROM projects");
-}
-
 async function importDataDir(db: Database.Database, dataDir: string): Promise<void> {
   const layout = await detectLayout(dataDir);
   console.log(`Importing sessions from ${dataDir} (${layout} layout)`);
@@ -243,8 +238,6 @@ async function initDb(): Promise<void> {
 export async function rescanDb(): Promise<void> {
   const dataDir = process.env.DATA_DIR;
   if (!dataDir) throw new Error("DATA_DIR environment variable is required");
-  const db = getDb();
-  resetDb(db);
-  await importDataDir(db, dataDir);
+  await importDataDir(getDb(), dataDir);
   _initPromise = Promise.resolve();
 }
