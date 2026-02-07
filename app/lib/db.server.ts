@@ -128,25 +128,32 @@ export async function importMultiUserDataDir(db: Database.Database, dataDir: str
   }
 }
 
-export function getProjects(db: Database.Database, user?: string): Array<{ dirId: string; name: string; path: string; sessionCount: number; user: string }> {
-  if (user) {
-    return db.prepare(`
-      SELECT p.dir_id as dirId, p.name, p.path, p.user, COUNT(s.session_id) as sessionCount
-      FROM projects p LEFT JOIN sessions s ON s.project_dir_id = p.dir_id
-      WHERE p.user = ?
-      GROUP BY p.dir_id ORDER BY p.name
-    `).all(user) as Array<{ dirId: string; name: string; path: string; sessionCount: number; user: string }>;
-  }
+export function getProjects(db: Database.Database, user?: string, hostname?: string): Array<{ dirId: string; name: string; path: string; sessionCount: number; user: string }> {
+  const conditions: string[] = [];
+  const params: string[] = [];
+  if (user) { conditions.push("p.user = ?"); params.push(user); }
+  if (hostname) { conditions.push("p.hostname = ?"); params.push(hostname); }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   return db.prepare(`
     SELECT p.dir_id as dirId, p.name, p.path, p.user, COUNT(s.session_id) as sessionCount
     FROM projects p LEFT JOIN sessions s ON s.project_dir_id = p.dir_id
+    ${where}
     GROUP BY p.dir_id ORDER BY p.name
-  `).all() as Array<{ dirId: string; name: string; path: string; sessionCount: number; user: string }>;
+  `).all(...params) as Array<{ dirId: string; name: string; path: string; sessionCount: number; user: string }>;
 }
 
 export function getUsers(db: Database.Database): string[] {
   const rows = db.prepare("SELECT DISTINCT user FROM projects WHERE user != '' ORDER BY user").all() as Array<{ user: string }>;
   return rows.map((r) => r.user);
+}
+
+export function getHosts(db: Database.Database, user?: string): string[] {
+  if (user) {
+    const rows = db.prepare("SELECT DISTINCT hostname FROM projects WHERE hostname != '' AND user = ? ORDER BY hostname").all(user) as Array<{ hostname: string }>;
+    return rows.map((r) => r.hostname);
+  }
+  const rows = db.prepare("SELECT DISTINCT hostname FROM projects WHERE hostname != '' ORDER BY hostname").all() as Array<{ hostname: string }>;
+  return rows.map((r) => r.hostname);
 }
 
 export function getSessionsByProject(db: Database.Database, projectDirId: string, limit = 100, offset = 0): SessionMeta[] {
