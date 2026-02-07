@@ -19,34 +19,27 @@ export function SessionCard({ session, showUser }: { session: SessionMeta; showU
       to={`/sessions/${session.projectId}/${session.sessionId}`}
       className="card block px-4 py-3"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-ink truncate">
-            {session.firstPrompt || "No prompt"}
-          </p>
-          {session.summary && (
-            <p className="text-xs text-slate mt-1 line-clamp-2">{session.summary}</p>
-          )}
-        </div>
-        <div className="text-right shrink-0">
-          <p className="text-xs text-slate">{formatDate(session.modified)}</p>
-          <p className="text-xs text-slate">{formatTime(session.modified)}</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-3 mt-2">
+      <p className="text-sm font-medium text-ink line-clamp-2">
+        {session.firstPrompt || "No prompt"}
+      </p>
+      {session.summary && (
+        <p className="text-xs text-slate mt-1 line-clamp-2">{session.summary}</p>
+      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-slate">
+        <span>{formatDate(session.modified)} {formatTime(session.modified)}</span>
         {showUser && session.user && (
-          <span className="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+          <span className="text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
             {session.user}
           </span>
         )}
         {session.gitBranch && (
-          <span className="text-xs text-slate bg-panel px-1.5 py-0.5 rounded">
+          <span className="bg-panel px-1.5 py-0.5 rounded">
             {session.gitBranch}
           </span>
         )}
-        <span className="text-xs text-slate">{session.messageCount} messages</span>
+        <span>{session.messageCount} messages</span>
         {session.subagentCount > 0 && (
-          <span className="text-xs text-teal">
+          <span className="text-teal">
             {session.subagentCount} subagent{session.subagentCount !== 1 ? "s" : ""}
           </span>
         )}
