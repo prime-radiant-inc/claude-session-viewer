@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import path from "path";
-import { discoverProjects, discoverSessions, discoverSubagents, readSessionsIndex, discoverUsers, discoverUserProjects, detectLayout } from "./scanner.server";
+import { discoverProjects, discoverSessions, discoverSubagents, readSessionsIndex, discoverUsers, discoverHosts, discoverUserProjects, detectLayout } from "./scanner.server";
 import { parseSessionFile, extractSummary, extractFirstPrompt } from "./parser.server";
 import type { SessionMeta } from "./types";
 
@@ -14,7 +14,8 @@ export function createDb(dbPath: string): Database.Database {
       dir_id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       path TEXT NOT NULL,
-      user TEXT NOT NULL DEFAULT ''
+      user TEXT NOT NULL DEFAULT '',
+      hostname TEXT NOT NULL DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
@@ -62,8 +63,8 @@ export function createDb(dbPath: string): Database.Database {
   return db;
 }
 
-async function importProjects(db: Database.Database, projects: Array<{ dirId: string; name: string; path: string }>, user: string): Promise<void> {
-  const upsertProject = db.prepare("INSERT OR REPLACE INTO projects (dir_id, name, path, user) VALUES (?, ?, ?, ?)");
+async function importProjects(db: Database.Database, projects: Array<{ dirId: string; name: string; path: string }>, user: string, hostname: string): Promise<void> {
+  const upsertProject = db.prepare("INSERT OR REPLACE INTO projects (dir_id, name, path, user, hostname) VALUES (?, ?, ?, ?, ?)");
   const upsertSession = db.prepare(`
     INSERT OR REPLACE INTO sessions
     (session_id, project_dir_id, first_prompt, summary, message_count, subagent_count,
@@ -73,7 +74,7 @@ async function importProjects(db: Database.Database, projects: Array<{ dirId: st
   const getSessionMtime = db.prepare("SELECT file_mtime FROM sessions WHERE session_id = ?");
 
   for (const project of projects) {
-    upsertProject.run(project.dirId, project.name, project.path, user);
+    upsertProject.run(project.dirId, project.name, project.path, user, hostname);
 
     const index = await readSessionsIndex(project.path);
     const sessionFiles = await discoverSessions(project.path);
@@ -112,15 +113,18 @@ async function importProjects(db: Database.Database, projects: Array<{ dirId: st
 
 export async function importFromDataDir(db: Database.Database, dataDir: string): Promise<void> {
   const projects = await discoverProjects(dataDir);
-  await importProjects(db, projects, "");
+  await importProjects(db, projects, "", "");
 }
 
 export async function importMultiUserDataDir(db: Database.Database, dataDir: string): Promise<void> {
   const users = await discoverUsers(dataDir);
   for (const user of users) {
     const userDir = path.join(dataDir, user);
-    const projects = await discoverUserProjects(userDir);
-    await importProjects(db, projects, user);
+    const hosts = await discoverHosts(userDir);
+    for (const hostname of hosts) {
+      const projects = await discoverUserProjects(userDir, user, hostname);
+      await importProjects(db, projects, user, hostname);
+    }
   }
 }
 

@@ -91,8 +91,8 @@ describe("importMultiUserDataDir", () => {
 
   beforeEach(() => {
     multiUserDir = mkdtempSync(path.join(tmpdir(), "se-mu-db-test-"));
-    // jesse/prime-radiant with index
-    const jesseDir = path.join(multiUserDir, "jesse", "prime-radiant");
+    // jesse/paradise-park/prime-radiant with index
+    const jesseDir = path.join(multiUserDir, "jesse", "paradise-park", "prime-radiant");
     mkdirSync(jesseDir, { recursive: true });
     writeFileSync(path.join(jesseDir, "aaa-111.jsonl"),
       '{"type":"user","uuid":"u1","sessionId":"aaa-111","timestamp":"2026-01-21T10:00:00Z","isSidechain":false,"message":{"role":"user","content":"fix the login bug"}}\n{"type":"summary","summary":"Fixed auth bug","leafUuid":"u1"}\n');
@@ -103,8 +103,8 @@ describe("importMultiUserDataDir", () => {
       ],
     }));
 
-    // drew/prime-radiant without index (fallback to parsing)
-    const drewDir = path.join(multiUserDir, "drew", "prime-radiant");
+    // drew/drews-laptop/prime-radiant without index (fallback to parsing)
+    const drewDir = path.join(multiUserDir, "drew", "drews-laptop", "prime-radiant");
     mkdirSync(drewDir, { recursive: true });
     writeFileSync(path.join(drewDir, "ddd-444.jsonl"),
       '{"type":"user","uuid":"u3","sessionId":"ddd-444","timestamp":"2026-01-23T10:00:00Z","isSidechain":false,"message":{"role":"user","content":"deploy the app"}}\n{"type":"summary","summary":"Deployed app","leafUuid":"u3"}\n');
@@ -142,8 +142,8 @@ describe("getUsers", () => {
 
   beforeEach(() => {
     multiUserDir = mkdtempSync(path.join(tmpdir(), "se-users-test-"));
-    for (const user of ["jesse", "drew"]) {
-      const dir = path.join(multiUserDir, user, "proj");
+    for (const [user, host] of [["jesse", "paradise-park"], ["drew", "drews-laptop"]]) {
+      const dir = path.join(multiUserDir, user, host, "proj");
       mkdirSync(dir, { recursive: true });
       writeFileSync(path.join(dir, "s1.jsonl"),
         `{"type":"user","uuid":"u","sessionId":"s-${user}","timestamp":"2026-01-21T10:00:00Z","isSidechain":false,"message":{"role":"user","content":"hello"}}\n`);
@@ -164,8 +164,8 @@ describe("user-filtered queries", () => {
 
   beforeEach(() => {
     multiUserDir = mkdtempSync(path.join(tmpdir(), "se-filter-test-"));
-    for (const user of ["jesse", "drew"]) {
-      const dir = path.join(multiUserDir, user, "proj");
+    for (const [user, host] of [["jesse", "paradise-park"], ["drew", "drews-laptop"]]) {
+      const dir = path.join(multiUserDir, user, host, "proj");
       mkdirSync(dir, { recursive: true });
       writeFileSync(path.join(dir, `${user}-session.jsonl`),
         `{"type":"user","uuid":"u","sessionId":"${user}-session","timestamp":"2026-01-21T10:00:00Z","isSidechain":false,"message":{"role":"user","content":"hello from ${user}"}}\n{"type":"summary","summary":"Work by ${user}","leafUuid":"u"}\n`);

@@ -104,17 +104,34 @@ export async function discoverUsers(dataDir: string): Promise<string[]> {
     .sort();
 }
 
-export async function discoverUserProjects(userDir: string): Promise<ProjectInfo[]> {
-  const userName = path.basename(userDir);
+export async function discoverHosts(userDir: string): Promise<string[]> {
   const entries = await readdir(userDir, { withFileTypes: true });
+  const hosts: string[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    // Check if this is a hostname dir (contains project dirs) vs a project dir (contains .jsonl files)
+    const subEntries = await readdir(path.join(userDir, entry.name), { withFileTypes: true });
+    const hasJsonl = subEntries.some((e) => e.isFile() && e.name.endsWith(".jsonl"));
+    if (!hasJsonl) {
+      hosts.push(entry.name);
+    }
+  }
+
+  return hosts.sort();
+}
+
+export async function discoverUserProjects(userDir: string, user: string, hostname: string): Promise<ProjectInfo[]> {
+  const hostDir = path.join(userDir, hostname);
+  const entries = await readdir(hostDir, { withFileTypes: true });
   const projects: ProjectInfo[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     projects.push({
-      dirId: `${userName}/${entry.name}`,
+      dirId: `${user}/${hostname}/${entry.name}`,
       name: entry.name,
-      path: path.join(userDir, entry.name),
+      path: path.join(hostDir, entry.name),
     });
   }
 

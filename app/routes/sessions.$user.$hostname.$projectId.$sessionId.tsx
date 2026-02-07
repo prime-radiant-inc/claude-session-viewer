@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useLoaderData, Link } from "react-router";
-import type { Route } from "./+types/sessions.$user.$projectId.$sessionId";
+import type { Route } from "./+types/sessions.$user.$hostname.$projectId.$sessionId";
 import { AppShell } from "~/components/layout/AppShell";
 import { InfiniteMessageList } from "~/components/session/InfiniteMessageList";
 import { ConversationMinimap } from "~/components/session/ConversationMinimap";
@@ -18,8 +18,8 @@ export function meta({ data }: Route.MetaArgs) {
 }
 
 export async function loader({ params }: Route.LoaderArgs) {
-  const { user, projectId, sessionId } = params;
-  const dirId = `${user}/${projectId}`;
+  const { user, hostname, projectId, sessionId } = params;
+  const dirId = `${user}/${hostname}/${projectId}`;
   const db = await ensureInitialized();
 
   const session = db.prepare(`

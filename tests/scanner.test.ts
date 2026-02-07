@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
-import { discoverProjects, discoverSessions, discoverSubagents, parseProjectName, readSessionsIndex, discoverUsers, discoverUserProjects, detectLayout } from "~/lib/scanner.server";
+import { discoverProjects, discoverSessions, discoverSubagents, parseProjectName, readSessionsIndex, discoverUsers, discoverHosts, discoverUserProjects, detectLayout } from "~/lib/scanner.server";
 
 let testDir: string;
 
@@ -112,37 +112,65 @@ describe("discoverUsers", () => {
   });
 });
 
+describe("discoverHosts", () => {
+  let multiUserDir: string;
+
+  beforeEach(() => {
+    multiUserDir = mkdtempSync(path.join(tmpdir(), "se-hosts-test-"));
+    const userDir = path.join(multiUserDir, "jesse");
+    // paradise-park is a hostname dir (contains project dirs, not .jsonl files)
+    mkdirSync(path.join(userDir, "paradise-park", "prime-radiant"), { recursive: true });
+    writeFileSync(path.join(userDir, "paradise-park", "prime-radiant", "aaa-111.jsonl"), '{"type":"user"}\n');
+    // another-host is also a hostname dir
+    mkdirSync(path.join(userDir, "another-host", "scribble"), { recursive: true });
+    writeFileSync(path.join(userDir, "another-host", "scribble", "bbb-222.jsonl"), '{"type":"user"}\n');
+  });
+
+  afterEach(() => { rmSync(multiUserDir, { recursive: true, force: true }); });
+
+  it("returns hostname directories sorted alphabetically", async () => {
+    const hosts = await discoverHosts(path.join(multiUserDir, "jesse"));
+    expect(hosts).toEqual(["another-host", "paradise-park"]);
+  });
+
+  it("ignores directories starting with dot", async () => {
+    mkdirSync(path.join(multiUserDir, "jesse", ".hidden"));
+    const hosts = await discoverHosts(path.join(multiUserDir, "jesse"));
+    expect(hosts).toEqual(["another-host", "paradise-park"]);
+  });
+});
+
 describe("discoverUserProjects", () => {
   let multiUserDir: string;
 
   beforeEach(() => {
     multiUserDir = mkdtempSync(path.join(tmpdir(), "se-mu-test-"));
-    const jesse = path.join(multiUserDir, "jesse");
-    mkdirSync(path.join(jesse, "prime-radiant"), { recursive: true });
-    mkdirSync(path.join(jesse, "scribble"), { recursive: true });
-    writeFileSync(path.join(jesse, "prime-radiant", "aaa-111.jsonl"), '{"type":"user"}\n');
-    writeFileSync(path.join(jesse, "scribble", "bbb-222.jsonl"), '{"type":"user"}\n');
+    const hostDir = path.join(multiUserDir, "jesse", "paradise-park");
+    mkdirSync(path.join(hostDir, "prime-radiant"), { recursive: true });
+    mkdirSync(path.join(hostDir, "scribble"), { recursive: true });
+    writeFileSync(path.join(hostDir, "prime-radiant", "aaa-111.jsonl"), '{"type":"user"}\n');
+    writeFileSync(path.join(hostDir, "scribble", "bbb-222.jsonl"), '{"type":"user"}\n');
   });
 
   afterEach(() => { rmSync(multiUserDir, { recursive: true, force: true }); });
 
-  it("returns projects within a user directory", async () => {
-    const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"));
+  it("returns projects within a hostname directory", async () => {
+    const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"), "jesse", "paradise-park");
     expect(projects.length).toBe(2);
     const names = projects.map((p) => p.name).sort();
     expect(names).toEqual(["prime-radiant", "scribble"]);
   });
 
-  it("uses user/project as dirId", async () => {
-    const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"));
+  it("uses user/hostname/project as dirId", async () => {
+    const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"), "jesse", "paradise-park");
     const pr = projects.find((p) => p.name === "prime-radiant");
-    expect(pr?.dirId).toBe("jesse/prime-radiant");
+    expect(pr?.dirId).toBe("jesse/paradise-park/prime-radiant");
   });
 
   it("includes full path", async () => {
-    const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"));
+    const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"), "jesse", "paradise-park");
     const pr = projects.find((p) => p.name === "prime-radiant");
-    expect(pr?.path).toBe(path.join(multiUserDir, "jesse", "prime-radiant"));
+    expect(pr?.path).toBe(path.join(multiUserDir, "jesse", "paradise-park", "prime-radiant"));
   });
 });
 
