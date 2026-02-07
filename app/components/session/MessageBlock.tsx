@@ -6,6 +6,12 @@ import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCallBlock } from "./ToolCallBlock";
 import { SubagentPanel } from "./SubagentPanel";
 
+function formatTimestamp(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
 interface SubagentContext {
   subagentMap: Record<string, string>;
   projectId: string;
@@ -89,6 +95,9 @@ export function MessageBlock({ message, subagentMap, projectId, sessionId }: Mes
           <span className="text-xs text-slate">
             {formatModelName(message.model)}
           </span>
+        )}
+        {message.timestamp && (
+          <span className="text-xs text-slate ml-auto">{formatTimestamp(message.timestamp)}</span>
         )}
       </div>
 
