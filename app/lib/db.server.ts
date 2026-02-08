@@ -112,9 +112,9 @@ async function importProjects(db: Database.Database, projects: Array<{ dirId: st
         const existing = getSessionMtime.get(entry.sessionId) as { file_mtime: number } | undefined;
         if (existing && existing.file_mtime >= mtime) continue;
         const subagents = await discoverSubagents(project.path, entry.sessionId);
-        upsertSession.run(entry.sessionId, project.dirId, entry.firstPrompt, entry.summary,
-          entry.messageCount, subagents.length, entry.created, entry.modified,
-          entry.gitBranch, entry.projectPath, fileInfo?.filePath ?? "", mtime, user);
+        upsertSession.run(entry.sessionId, project.dirId, entry.firstPrompt ?? "", entry.summary ?? "",
+          entry.messageCount, subagents.length, entry.created ?? "", entry.modified ?? "",
+          entry.gitBranch ?? "", entry.projectPath ?? "", fileInfo?.filePath ?? "", mtime, user);
       }
     }
 
