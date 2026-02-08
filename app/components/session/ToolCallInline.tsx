@@ -320,6 +320,43 @@ function DefaultCall({ name, input, result }: {
   );
 }
 
+// --- Codex tool renderers ---
+
+function ExecCommandCall({ input, result }: { input: Record<string, unknown>; result?: ToolResult }) {
+  const cmd = Array.isArray(input.cmd) ? (input.cmd as string[]).join(" ") : String(input.cmd || "");
+  const workdir = String(input.workdir || "");
+  const output = result ? resultText(result) : "";
+
+  return (
+    <div>
+      {workdir && <div className="text-xs text-slate mb-0.5">{workdir}</div>}
+      <div className="text-xs font-mono bg-panel/40 px-2.5 py-1.5 rounded-lg text-ink">
+        <span className="text-slate select-none">$ </span>{maskSecrets(cmd)}
+      </div>
+      {result && <ResultBox text={output} isError={result.isError} maxLines={30} />}
+    </div>
+  );
+}
+
+function ApplyPatchCall({ input, result }: { input: Record<string, unknown>; result?: ToolResult }) {
+  const patch = String(input.patch || input.input || "");
+  const output = result ? resultText(result) : "";
+
+  return (
+    <div>
+      <div className="text-xs">
+        <ToolLabel name="apply_patch" />
+      </div>
+      {patch && (
+        <pre className="text-xs whitespace-pre-wrap break-words mt-1 px-2.5 py-1.5 bg-panel/50 rounded-lg text-ink-light">
+          {patch}
+        </pre>
+      )}
+      {result && output.trim() && <ResultBox text={output} isError={result.isError} maxLines={10} />}
+    </div>
+  );
+}
+
 // --- Dispatcher ---
 
 const TASK_TOOLS = new Set(["TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite", "TodoRead"]);
@@ -330,6 +367,10 @@ export function ToolCallInline({ name, id, input, result, subagentCtx }: ToolCal
 
   if (name === "Bash") {
     content = <BashCall input={input} result={result} />;
+  } else if (name === "exec_command") {
+    content = <ExecCommandCall input={input} result={result} />;
+  } else if (name === "apply_patch") {
+    content = <ApplyPatchCall input={input} result={result} />;
   } else if (name === "Read") {
     content = <ReadCall input={input} result={result} />;
   } else if (name === "Write") {
