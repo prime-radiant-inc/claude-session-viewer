@@ -130,12 +130,24 @@ export async function discoverUserProjects(userDir: string, user: string, hostna
     if (!entry.isDirectory()) continue;
     projects.push({
       dirId: `${user}/${hostname}/${entry.name}`,
-      name: entry.name,
+      name: entry.name.startsWith("-") ? parseProjectName(entry.name) : entry.name,
       path: path.join(hostDir, entry.name),
     });
   }
 
-  return projects.sort((a, b) => a.name.localeCompare(b.name));
+  projects.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Detect sub-projects by prefix matching on decoded names
+  for (let i = 0; i < projects.length; i++) {
+    for (let j = i + 1; j < projects.length; j++) {
+      if (projects[j].name.startsWith(projects[i].name + "-")) {
+        const suffix = projects[j].name.slice(projects[i].name.length + 1);
+        projects[j].name = projects[i].name + "/" + suffix;
+      }
+    }
+  }
+
+  return projects;
 }
 
 export async function discoverSubagents(projectPath: string, sessionId: string): Promise<SubagentFileInfo[]> {

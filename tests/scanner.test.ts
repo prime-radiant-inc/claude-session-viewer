@@ -172,6 +172,26 @@ describe("discoverUserProjects", () => {
     const pr = projects.find((p) => p.name === "prime-radiant");
     expect(pr?.path).toBe(path.join(multiUserDir, "jesse", "paradise-park", "prime-radiant"));
   });
+
+  it("decodes encoded directory names starting with hyphen", async () => {
+    const hostDir = path.join(multiUserDir, "jesse", "paradise-park");
+    mkdirSync(path.join(hostDir, "-Users-jesse--clank"), { recursive: true });
+    writeFileSync(path.join(hostDir, "-Users-jesse--clank", "eee-555.jsonl"), '{"type":"user"}\n');
+    const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"), "jesse", "paradise-park");
+    const decoded = projects.find((p) => p.dirId.includes("-Users-jesse--clank"));
+    expect(decoded).toBeDefined();
+    expect(decoded!.name).toBe("-clank");
+  });
+
+  it("applies sub-project prefix matching to decoded names", async () => {
+    const hostDir = path.join(multiUserDir, "jesse", "paradise-park");
+    mkdirSync(path.join(hostDir, "-Users-jesse-prime-radiant-scribble"), { recursive: true });
+    writeFileSync(path.join(hostDir, "-Users-jesse-prime-radiant-scribble", "fff-666.jsonl"), '{"type":"user"}\n');
+    const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"), "jesse", "paradise-park");
+    const sub = projects.find((p) => p.dirId.includes("-Users-jesse-prime-radiant-scribble"));
+    expect(sub).toBeDefined();
+    expect(sub!.name).toBe("prime-radiant/scribble");
+  });
 });
 
 describe("detectLayout", () => {
