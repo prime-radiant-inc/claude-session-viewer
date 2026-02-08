@@ -30,6 +30,15 @@ describe("parseProjectName", () => {
   it("returns raw joined name without sub-project detection", () => {
     expect(parseProjectName("-Users-jesse-prime-radiant-scribble")).toBe("prime-radiant-scribble");
   });
+  it("filters empty segments from dot-directory encoding", () => {
+    expect(parseProjectName("-Users-jesse--clank")).toBe("clank");
+  });
+  it("falls back to last segment when path is too short", () => {
+    expect(parseProjectName("-Users-jesse")).toBe("jesse");
+  });
+  it("handles tmp paths", () => {
+    expect(parseProjectName("-tmp-planning")).toBe("planning");
+  });
 });
 
 describe("discoverProjects", () => {
@@ -180,17 +189,17 @@ describe("discoverUserProjects", () => {
     const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"), "jesse", "paradise-park");
     const decoded = projects.find((p) => p.dirId.includes("-Users-jesse--clank"));
     expect(decoded).toBeDefined();
-    expect(decoded!.name).toBe("-clank");
+    expect(decoded!.name).toBe("clank");
   });
 
-  it("applies sub-project prefix matching to decoded names", async () => {
+  it("decodes encoded names as flat names without sub-project hierarchy", async () => {
     const hostDir = path.join(multiUserDir, "jesse", "paradise-park");
     mkdirSync(path.join(hostDir, "-Users-jesse-prime-radiant-scribble"), { recursive: true });
     writeFileSync(path.join(hostDir, "-Users-jesse-prime-radiant-scribble", "fff-666.jsonl"), '{"type":"user"}\n');
     const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"), "jesse", "paradise-park");
     const sub = projects.find((p) => p.dirId.includes("-Users-jesse-prime-radiant-scribble"));
     expect(sub).toBeDefined();
-    expect(sub!.name).toBe("prime-radiant/scribble");
+    expect(sub!.name).toBe("prime-radiant-scribble");
   });
 });
 

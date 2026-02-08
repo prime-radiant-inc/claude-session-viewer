@@ -21,7 +21,11 @@ export interface SubagentFileInfo {
 
 export function parseProjectName(dirName: string): string {
   const segments = dirName.slice(1).split("-");
-  return segments.slice(2).join("-");
+  const remaining = segments.slice(2).filter((s) => s !== "");
+  if (remaining.length > 0) return remaining.join("-");
+  // Fallback: use last non-empty segment (e.g. "-Users-jesse" → "jesse")
+  const last = segments.filter((s) => s !== "").pop();
+  return last || dirName;
 }
 
 export async function discoverProjects(dataDir: string): Promise<ProjectInfo[]> {
@@ -135,19 +139,7 @@ export async function discoverUserProjects(userDir: string, user: string, hostna
     });
   }
 
-  projects.sort((a, b) => a.name.localeCompare(b.name));
-
-  // Detect sub-projects by prefix matching on decoded names
-  for (let i = 0; i < projects.length; i++) {
-    for (let j = i + 1; j < projects.length; j++) {
-      if (projects[j].name.startsWith(projects[i].name + "-")) {
-        const suffix = projects[j].name.slice(projects[i].name.length + 1);
-        projects[j].name = projects[i].name + "/" + suffix;
-      }
-    }
-  }
-
-  return projects;
+  return projects.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function discoverSubagents(projectPath: string, sessionId: string): Promise<SubagentFileInfo[]> {
