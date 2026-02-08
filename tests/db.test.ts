@@ -39,6 +39,22 @@ describe("createDb", () => {
     expect(names).toContain("sessions");
     expect(names).toContain("sessions_fts");
   });
+
+  it("adds hidden column to projects table", () => {
+    const cols = db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
+    expect(cols.map((c) => c.name)).toContain("hidden");
+  });
+
+  it("adds hidden column to sessions table", () => {
+    const cols = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+    expect(cols.map((c) => c.name)).toContain("hidden");
+  });
+
+  it("defaults hidden to 0", () => {
+    db.prepare("INSERT INTO projects (dir_id, name, path) VALUES ('test', 'test', '/test')").run();
+    const row = db.prepare("SELECT hidden FROM projects WHERE dir_id = 'test'").get() as { hidden: number };
+    expect(row.hidden).toBe(0);
+  });
 });
 
 describe("importFromDataDir", () => {

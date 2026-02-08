@@ -60,6 +60,16 @@ export function createDb(dbPath: string): Database.Database {
     END;
   `);
 
+  // Migrations: add hidden columns if missing
+  const projectCols = db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
+  if (!projectCols.some((c) => c.name === "hidden")) {
+    db.exec("ALTER TABLE projects ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
+  }
+  const sessionCols = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+  if (!sessionCols.some((c) => c.name === "hidden")) {
+    db.exec("ALTER TABLE sessions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
+  }
+
   return db;
 }
 
