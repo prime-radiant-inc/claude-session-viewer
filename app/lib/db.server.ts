@@ -259,6 +259,16 @@ async function initDb(): Promise<void> {
   await importDataDir(getDb(), dataDir);
 }
 
+export function setSessionHidden(db: Database.Database, sessionId: string, hidden: boolean): void {
+  db.prepare("UPDATE sessions SET hidden = ? WHERE session_id = ?").run(hidden ? 1 : 0, sessionId);
+}
+
+export function setProjectHidden(db: Database.Database, dirId: string, hidden: boolean): void {
+  const setHidden = hidden ? 1 : 0;
+  db.prepare("UPDATE projects SET hidden = ? WHERE dir_id = ?").run(setHidden, dirId);
+  db.prepare("UPDATE sessions SET hidden = ? WHERE project_dir_id = ?").run(setHidden, dirId);
+}
+
 export async function rescanDb(): Promise<void> {
   const dataDir = process.env.DATA_DIR;
   if (!dataDir) throw new Error("DATA_DIR environment variable is required");

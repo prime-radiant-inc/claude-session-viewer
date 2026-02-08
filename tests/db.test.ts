@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
-import { createDb, importFromDataDir, importMultiUserDataDir, searchSessions, getSessionsByProject, getProjects, getUsers, getAllSessions } from "~/lib/db.server";
+import { createDb, importFromDataDir, importMultiUserDataDir, searchSessions, getSessionsByProject, getProjects, getUsers, getAllSessions, setSessionHidden, setProjectHidden } from "~/lib/db.server";
 import type Database from "better-sqlite3";
 
 let testDir: string;
@@ -202,6 +202,37 @@ describe("hidden filtering", () => {
     const visible = sessions.find((s) => s.sessionId === "bbb-222");
     expect(hidden!.hidden).toBe(1);
     expect(visible!.hidden).toBe(0);
+  });
+
+  it("setSessionHidden hides a single session", async () => {
+    await importFromDataDir(db, testDir);
+    setSessionHidden(db, "aaa-111", true);
+    const sessions = getAllSessions(db);
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].sessionId).toBe("bbb-222");
+  });
+
+  it("setSessionHidden unhides a session", async () => {
+    await importFromDataDir(db, testDir);
+    setSessionHidden(db, "aaa-111", true);
+    setSessionHidden(db, "aaa-111", false);
+    const sessions = getAllSessions(db);
+    expect(sessions.length).toBe(2);
+  });
+
+  it("setProjectHidden hides project and cascades to sessions", async () => {
+    await importFromDataDir(db, testDir);
+    setProjectHidden(db, "-Users-jesse-prime-radiant", true);
+    expect(getProjects(db).length).toBe(0);
+    expect(getAllSessions(db).length).toBe(0);
+  });
+
+  it("setProjectHidden unhides project and cascades to sessions", async () => {
+    await importFromDataDir(db, testDir);
+    setProjectHidden(db, "-Users-jesse-prime-radiant", true);
+    setProjectHidden(db, "-Users-jesse-prime-radiant", false);
+    expect(getProjects(db).length).toBe(1);
+    expect(getAllSessions(db).length).toBe(2);
   });
 });
 
