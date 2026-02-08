@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
-import { createDb, importFromDataDir, importMultiUserDataDir, searchSessions, getSessionsByProject, getProjects, getUsers, getAllSessions, setSessionHidden, setProjectHidden } from "~/lib/db.server";
+import { createDb, importFromDataDir, importMultiUserDataDir, searchSessions, getSessionsByProject, getProjects, getUsers, getAllSessions, setSessionHidden, setProjectHidden, shouldAutoHide } from "~/lib/db.server";
 import type Database from "better-sqlite3";
 
 let testDir: string;
@@ -62,14 +62,14 @@ describe("importFromDataDir", () => {
     await importFromDataDir(db, testDir);
     const projects = getProjects(db);
     expect(projects.length).toBe(1);
-    const sessions = getSessionsByProject(db, projects[0].dirId);
+    const sessions = getSessionsByProject(db, projects[0].name);
     expect(sessions.length).toBe(2);
   });
 
   it("populates session metadata from index", async () => {
     await importFromDataDir(db, testDir);
     const projects = getProjects(db);
-    const sessions = getSessionsByProject(db, projects[0].dirId);
+    const sessions = getSessionsByProject(db, projects[0].name);
     const s = sessions.find((s) => s.sessionId === "aaa-111");
     expect(s?.summary).toBe("Fixed authentication bug");
     expect(s?.firstPrompt).toBe("fix the login bug");
@@ -168,7 +168,7 @@ describe("hidden filtering", () => {
   it("getSessionsByProject excludes hidden sessions by default", async () => {
     await importFromDataDir(db, testDir);
     db.prepare("UPDATE sessions SET hidden = 1 WHERE session_id = ?").run("aaa-111");
-    const sessions = getSessionsByProject(db, "-Users-jesse-prime-radiant");
+    const sessions = getSessionsByProject(db, "prime-radiant");
     expect(sessions.length).toBe(1);
     expect(sessions[0].sessionId).toBe("bbb-222");
   });
@@ -176,7 +176,7 @@ describe("hidden filtering", () => {
   it("getSessionsByProject includes hidden sessions when requested", async () => {
     await importFromDataDir(db, testDir);
     db.prepare("UPDATE sessions SET hidden = 1 WHERE session_id = ?").run("aaa-111");
-    const sessions = getSessionsByProject(db, "-Users-jesse-prime-radiant", 100, 0, true);
+    const sessions = getSessionsByProject(db, "prime-radiant", 100, 0, true);
     expect(sessions.length).toBe(2);
   });
 
@@ -222,15 +222,15 @@ describe("hidden filtering", () => {
 
   it("setProjectHidden hides project and cascades to sessions", async () => {
     await importFromDataDir(db, testDir);
-    setProjectHidden(db, "-Users-jesse-prime-radiant", true);
+    setProjectHidden(db, "prime-radiant", true);
     expect(getProjects(db).length).toBe(0);
     expect(getAllSessions(db).length).toBe(0);
   });
 
   it("setProjectHidden unhides project and cascades to sessions", async () => {
     await importFromDataDir(db, testDir);
-    setProjectHidden(db, "-Users-jesse-prime-radiant", true);
-    setProjectHidden(db, "-Users-jesse-prime-radiant", false);
+    setProjectHidden(db, "prime-radiant", true);
+    setProjectHidden(db, "prime-radiant", false);
     expect(getProjects(db).length).toBe(1);
     expect(getAllSessions(db).length).toBe(2);
   });
@@ -269,14 +269,20 @@ describe("importMultiUserDataDir", () => {
   it("imports projects and sessions with user field", async () => {
     await importMultiUserDataDir(db, multiUserDir);
     const projects = getProjects(db);
-    expect(projects.length).toBe(2);
-    // Both should have user set
-    const jesseProject = projects.find((p) => p.user === "jesse");
-    const drewProject = projects.find((p) => p.user === "drew");
-    expect(jesseProject).toBeDefined();
-    expect(drewProject).toBeDefined();
-    expect(jesseProject!.name).toBe("prime-radiant");
-    expect(drewProject!.name).toBe("prime-radiant");
+    // Both "prime-radiant" projects collapse into one entry
+    expect(projects.length).toBe(1);
+    expect(projects[0].name).toBe("prime-radiant");
+    expect(projects[0].sessionCount).toBe(2);
+  });
+
+  it("separates projects by user when user filter is active", async () => {
+    await importMultiUserDataDir(db, multiUserDir);
+    const jesseProjects = getProjects(db, "jesse");
+    const drewProjects = getProjects(db, "drew");
+    expect(jesseProjects.length).toBe(1);
+    expect(drewProjects.length).toBe(1);
+    expect(jesseProjects[0].sessionCount).toBe(1);
+    expect(drewProjects[0].sessionCount).toBe(1);
   });
 
   it("sets user on sessions", async () => {
@@ -332,7 +338,7 @@ describe("user-filtered queries", () => {
     await importMultiUserDataDir(db, multiUserDir);
     const jesseProjects = getProjects(db, "jesse");
     expect(jesseProjects.length).toBe(1);
-    expect(jesseProjects[0].user).toBe("jesse");
+    expect(jesseProjects[0].name).toBe("proj");
   });
 
   it("getAllSessions filters by user", async () => {
@@ -348,5 +354,53 @@ describe("user-filtered queries", () => {
     const results = searchSessions(db, "hello", 50, "jesse");
     expect(results.length).toBe(1);
     expect(results[0].user).toBe("jesse");
+  });
+});
+
+describe("shouldAutoHide", () => {
+  it("hides task agent work directories", () => {
+    expect(shouldAutoHide("5UCWGY4Y6o-work-1d79f99c-aac3-4d71-959e-92c92196345b")).toBe(true);
+  });
+
+  it("hides toil test runs", () => {
+    expect(shouldAutoHide("toil-eval-20260204-150200")).toBe(true);
+    expect(shouldAutoHide("toil-cow-clicker.QpjK1x")).toBe(true);
+  });
+
+  it("hides bare tmp directory", () => {
+    expect(shouldAutoHide("tmp")).toBe(true);
+  });
+
+  it("does not hide normal projects", () => {
+    expect(shouldAutoHide("prime-radiant")).toBe(false);
+    expect(shouldAutoHide("lace")).toBe(false);
+    expect(shouldAutoHide("claude-pa")).toBe(false);
+  });
+});
+
+describe("auto-hide on import", () => {
+  it("auto-hides warmup projects during initial import", async () => {
+    const warmupDir = path.join(testDir, "-Users-jesse-tmp");
+    mkdirSync(warmupDir);
+    writeFileSync(path.join(warmupDir, "xxx-999.jsonl"),
+      '{"type":"user","uuid":"u9","sessionId":"xxx-999","timestamp":"2026-01-21T10:00:00Z","isSidechain":false,"message":{"role":"user","content":"warmup"}}\n');
+    await importFromDataDir(db, testDir);
+    const allProjects = getProjects(db, undefined, undefined, true);
+    const warmup = allProjects.find((p) => p.name === "tmp");
+    expect(warmup).toBeDefined();
+    expect(warmup!.hidden).toBe(1);
+  });
+
+  it("preserves user-shown state on rescan", async () => {
+    const warmupDir = path.join(testDir, "-Users-jesse-tmp");
+    mkdirSync(warmupDir);
+    writeFileSync(path.join(warmupDir, "xxx-999.jsonl"),
+      '{"type":"user","uuid":"u9","sessionId":"xxx-999","timestamp":"2026-01-21T10:00:00Z","isSidechain":false,"message":{"role":"user","content":"warmup"}}\n');
+    await importFromDataDir(db, testDir);
+    // User explicitly shows it
+    db.prepare("UPDATE projects SET hidden = 0 WHERE name = 'tmp'").run();
+    await importFromDataDir(db, testDir);
+    const row = db.prepare("SELECT hidden FROM projects WHERE name = 'tmp'").get() as { hidden: number };
+    expect(row.hidden).toBe(0);
   });
 });

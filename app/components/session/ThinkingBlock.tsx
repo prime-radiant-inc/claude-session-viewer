@@ -1,6 +1,6 @@
 export function ThinkingBlock({ content }: { content: string }) {
   return (
-    <details className="group">
+    <details open className="group">
       <summary className="text-xs text-slate cursor-pointer hover:text-ink select-none">
         Thinking...
       </summary>

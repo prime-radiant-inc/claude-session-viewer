@@ -73,9 +73,19 @@ export function createDb(dbPath: string): Database.Database {
   return db;
 }
 
+export function shouldAutoHide(name: string): boolean {
+  // Task agent work directories (random ID + UUID)
+  if (/^.+-work-[0-9a-f]{8}-/.test(name)) return true;
+  // Toil test/eval runs
+  if (name.startsWith("toil-")) return true;
+  // Bare temp dirs
+  if (name === "tmp") return true;
+  return false;
+}
+
 async function importProjects(db: Database.Database, projects: Array<{ dirId: string; name: string; path: string }>, user: string, hostname: string): Promise<void> {
   const upsertProject = db.prepare(`
-    INSERT INTO projects (dir_id, name, path, user, hostname) VALUES (?, ?, ?, ?, ?)
+    INSERT INTO projects (dir_id, name, path, user, hostname, hidden) VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(dir_id) DO UPDATE SET name=excluded.name, path=excluded.path, user=excluded.user, hostname=excluded.hostname
   `);
   const upsertSession = db.prepare(`
@@ -96,7 +106,7 @@ async function importProjects(db: Database.Database, projects: Array<{ dirId: st
   const seenDirIds = new Set<string>();
   for (const project of projects) {
     if (!seenDirIds.has(project.dirId)) {
-      upsertProject.run(project.dirId, project.name, project.path, user, hostname);
+      upsertProject.run(project.dirId, project.name, project.path, user, hostname, shouldAutoHide(project.name) ? 1 : 0);
       seenDirIds.add(project.dirId);
     }
 
@@ -152,7 +162,7 @@ export async function importMultiUserDataDir(db: Database.Database, dataDir: str
   }
 }
 
-export function getProjects(db: Database.Database, user?: string, hostname?: string, includeHidden = false): Array<{ dirId: string; name: string; path: string; sessionCount: number; user: string; hidden: number }> {
+export function getProjects(db: Database.Database, user?: string, hostname?: string, includeHidden = false): Array<{ name: string; sessionCount: number; hidden: number }> {
   const conditions: string[] = [];
   const params: (string | number)[] = [];
   if (!includeHidden) { conditions.push("p.hidden = 0"); }
@@ -163,11 +173,11 @@ export function getProjects(db: Database.Database, user?: string, hostname?: str
     ? "COUNT(s.session_id)"
     : "COUNT(CASE WHEN s.hidden = 0 THEN 1 END)";
   return db.prepare(`
-    SELECT p.dir_id as dirId, p.name, p.path, p.user, p.hidden, ${countExpr} as sessionCount
+    SELECT p.name, MIN(p.hidden) as hidden, ${countExpr} as sessionCount
     FROM projects p LEFT JOIN sessions s ON s.project_dir_id = p.dir_id
     ${where}
-    GROUP BY p.dir_id ORDER BY p.name
-  `).all(...params) as Array<{ dirId: string; name: string; path: string; sessionCount: number; user: string; hidden: number }>;
+    GROUP BY p.name ORDER BY p.name
+  `).all(...params) as Array<{ name: string; sessionCount: number; hidden: number }>;
 }
 
 export function getUsers(db: Database.Database): string[] {
@@ -184,7 +194,7 @@ export function getHosts(db: Database.Database, user?: string): string[] {
   return rows.map((r) => r.hostname);
 }
 
-export function getSessionsByProject(db: Database.Database, projectDirId: string, limit = 100, offset = 0, includeHidden = false): SessionMeta[] {
+export function getSessionsByProject(db: Database.Database, projectName: string, limit = 100, offset = 0, includeHidden = false): SessionMeta[] {
   const hiddenFilter = includeHidden ? "" : " AND hidden = 0";
   return db.prepare(`
     SELECT session_id as sessionId, project_dir_id as projectId,
@@ -192,8 +202,9 @@ export function getSessionsByProject(db: Database.Database, projectDirId: string
            first_prompt as firstPrompt, summary, message_count as messageCount,
            subagent_count as subagentCount, created, modified,
            git_branch as gitBranch, project_path as projectPath, user, hidden
-    FROM sessions WHERE project_dir_id = ?${hiddenFilter} ORDER BY modified DESC LIMIT ? OFFSET ?
-  `).all(projectDirId, limit, offset) as SessionMeta[];
+    FROM sessions WHERE project_dir_id IN (SELECT dir_id FROM projects WHERE name = ?)${hiddenFilter}
+    ORDER BY modified DESC LIMIT ? OFFSET ?
+  `).all(projectName, limit, offset) as SessionMeta[];
 }
 
 export function getAllSessions(db: Database.Database, limit = 100, offset = 0, user?: string, includeHidden = false): SessionMeta[] {
@@ -267,10 +278,10 @@ export function setSessionHidden(db: Database.Database, sessionId: string, hidde
   db.prepare("UPDATE sessions SET hidden = ? WHERE session_id = ?").run(hidden ? 1 : 0, sessionId);
 }
 
-export function setProjectHidden(db: Database.Database, dirId: string, hidden: boolean): void {
+export function setProjectHidden(db: Database.Database, projectName: string, hidden: boolean): void {
   const setHidden = hidden ? 1 : 0;
-  db.prepare("UPDATE projects SET hidden = ? WHERE dir_id = ?").run(setHidden, dirId);
-  db.prepare("UPDATE sessions SET hidden = ? WHERE project_dir_id = ?").run(setHidden, dirId);
+  db.prepare("UPDATE projects SET hidden = ? WHERE name = ?").run(setHidden, projectName);
+  db.prepare("UPDATE sessions SET hidden = ? WHERE project_dir_id IN (SELECT dir_id FROM projects WHERE name = ?)").run(setHidden, projectName);
 }
 
 export async function rescanDb(): Promise<void> {

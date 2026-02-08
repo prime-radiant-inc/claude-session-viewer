@@ -80,7 +80,7 @@ export function MessageBlock({ message, subagentMap, projectId, sessionId }: Mes
 
   if (message.isToolResult) {
     return (
-      <div className="pl-4 border-l-2 border-edge-light">
+      <div className="pl-4 ml-1 opacity-70">
         {message.content.map((block, i) => renderContentBlock(block, i, subagentCtx))}
       </div>
     );

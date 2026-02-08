@@ -83,11 +83,11 @@ export default function Index() {
     setSearchParams(next);
   }
 
-  async function toggleProjectHidden(dirId: string, currentlyHidden: number) {
+  async function toggleProjectHidden(name: string, currentlyHidden: number) {
     await fetch("/api/hide-project", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dirId, hidden: !currentlyHidden }),
+      body: JSON.stringify({ name, hidden: !currentlyHidden }),
     });
     revalidator.revalidate();
   }
@@ -188,17 +188,17 @@ export default function Index() {
               <span className="text-xs text-slate ml-1">({totalSessions})</span>
             </button>
             {projects.map((project) => (
-              <div key={project.dirId} className={`flex items-center gap-1 ${project.hidden ? "opacity-40" : ""}`}>
+              <div key={project.name} className={`flex items-center gap-1 ${project.hidden ? "opacity-40" : ""}`}>
                 <button
                   onClick={() => {
-                    const p: Record<string, string> = { project: project.dirId };
+                    const p: Record<string, string> = { project: project.name };
                     if (userFilter) p.user = userFilter;
                     if (hostFilter) p.host = hostFilter;
                     if (admin) p.admin = "1";
                     setSearchParams(p);
                   }}
                   className={`flex-1 text-left px-2 py-1.5 rounded text-sm transition-colors ${
-                    projectFilter === project.dirId ? "bg-teal-wash text-teal font-medium" : "text-slate hover:text-ink"
+                    projectFilter === project.name ? "bg-teal-wash text-teal font-medium" : "text-slate hover:text-ink"
                   }`}
                 >
                   {project.name}
@@ -206,7 +206,7 @@ export default function Index() {
                 </button>
                 {admin && (
                   <button
-                    onClick={() => toggleProjectHidden(project.dirId, project.hidden)}
+                    onClick={() => toggleProjectHidden(project.name, project.hidden)}
                     className="shrink-0 text-xs px-1.5 py-0.5 rounded border border-edge hover:bg-panel transition-colors"
                     title={project.hidden ? "Unhide project" : "Hide project"}
                   >
