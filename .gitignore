@@ -5,3 +5,4 @@ build/
 *.db-shm
 *.db-wal
 .env
+inspo/
