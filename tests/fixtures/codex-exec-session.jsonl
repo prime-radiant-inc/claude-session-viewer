@@ -1,0 +1,3 @@
+{"timestamp":"2026-02-03T10:00:00.000Z","type":"session_meta","payload":{"id":"019c2286-exec-7550-b53b-cd4e1fd7c5e4","timestamp":"2026-02-03T10:00:00.000Z","cwd":"/tmp/automated-task","originator":"codex_exec","cli_version":"0.92.0","source":"exec","model_provider":"openai"}}
+{"timestamp":"2026-02-03T10:00:01.000Z","type":"event_msg","payload":{"type":"user_message","message":"Run the test suite"}}
+{"timestamp":"2026-02-03T10:00:05.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Tests passed."}}
