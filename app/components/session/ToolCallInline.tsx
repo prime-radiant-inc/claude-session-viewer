@@ -11,7 +11,6 @@ interface ToolResult {
 
 interface SubagentContext {
   subagentMap: Record<string, string>;
-  projectId: string;
   sessionId: string;
 }
 
@@ -206,7 +205,6 @@ function TaskCall({ input, result, id, subagentCtx }: {
       </div>
       {agentId && subagentCtx && (
         <SubagentPanel
-          projectId={subagentCtx.projectId}
           sessionId={subagentCtx.sessionId}
           agentId={agentId}
           description={description}

@@ -15,7 +15,6 @@ function formatTimestamp(iso: string): string {
 
 interface SubagentContext {
   subagentMap: Record<string, string>;
-  projectId: string;
   sessionId: string;
 }
 
@@ -71,7 +70,6 @@ interface MessageBlockProps {
   isConsumedToolResult?: boolean;
   toolResultMap?: Map<string, ToolResultEntry>;
   subagentMap?: Record<string, string>;
-  projectId?: string;
   sessionId?: string;
   showToolCalls?: boolean;
   showThinking?: boolean;
@@ -84,7 +82,6 @@ export function MessageBlock({
   isConsumedToolResult = false,
   toolResultMap = EMPTY_RESULT_MAP,
   subagentMap,
-  projectId,
   sessionId,
   showToolCalls = true,
   showThinking = true,
@@ -92,8 +89,8 @@ export function MessageBlock({
 }: MessageBlockProps) {
   const isUser = message.type === "user";
 
-  const subagentCtx = subagentMap && projectId && sessionId
-    ? { subagentMap, projectId, sessionId }
+  const subagentCtx = subagentMap && sessionId
+    ? { subagentMap, sessionId }
     : undefined;
 
   const ctx: RenderContext = { subagentCtx, showToolCalls, showThinking, toolResultMap };

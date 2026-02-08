@@ -17,7 +17,6 @@ interface InfiniteMessageListProps {
   pathSelections: Record<string, number>;
   onPathSwitch: (forkUuid: string, pathIndex: number) => void;
   subagentMap: Record<string, string>;
-  projectId: string;
   sessionId: string;
   onViewportChange: (topFraction: number, bottomFraction: number) => void;
   scrollToIndex: number | null;
@@ -33,7 +32,6 @@ export function InfiniteMessageList({
   pathSelections,
   onPathSwitch,
   subagentMap,
-  projectId,
   sessionId,
   onViewportChange,
   scrollToIndex,
@@ -235,7 +233,6 @@ export function InfiniteMessageList({
                 isConsumedToolResult={isConsumed}
                 toolResultMap={toolResultMap}
                 subagentMap={subagentMap}
-                projectId={projectId}
                 sessionId={sessionId}
                 showToolCalls={showToolCalls}
                 showThinking={showThinking}

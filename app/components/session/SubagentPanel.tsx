@@ -3,13 +3,12 @@ import type { ParsedMessage } from "~/lib/types";
 import { MessageBlock } from "./MessageBlock";
 
 interface SubagentPanelProps {
-  projectId: string;
   sessionId: string;
   agentId: string;
   description?: string;
 }
 
-export function SubagentPanel({ projectId, sessionId, agentId, description }: SubagentPanelProps) {
+export function SubagentPanel({ sessionId, agentId, description }: SubagentPanelProps) {
   const [expanded, setExpanded] = useState(false);
   const [messages, setMessages] = useState<ParsedMessage[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -25,7 +24,7 @@ export function SubagentPanel({ projectId, sessionId, agentId, description }: Su
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/subagent/${projectId}/${sessionId}/${agentId}`);
+      const res = await fetch(`/api/subagent/${sessionId}/${agentId}`);
       if (!res.ok) throw new Error("Failed to load subagent");
       const data = await res.json();
       setMessages(data.messages);

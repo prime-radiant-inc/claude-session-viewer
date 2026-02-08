@@ -229,7 +229,6 @@ export default function SessionDetail() {
             pathSelections={pathSelections}
             onPathSwitch={handlePathSwitch}
             subagentMap={data.subagentMap}
-            projectId={data.projectId}
             sessionId={data.sessionId!}
             onViewportChange={handleViewportChange}
             scrollToIndex={scrollToIndex}
