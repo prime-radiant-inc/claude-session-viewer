@@ -102,6 +102,7 @@ export interface SessionMeta {
   projectPath: string;
   subagentCount: number;
   user: string;
+  hidden: boolean;
 }
 
 export interface ParsedMessage {

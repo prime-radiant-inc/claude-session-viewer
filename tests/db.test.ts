@@ -121,6 +121,90 @@ describe("searchSessions", () => {
   });
 });
 
+describe("hidden filtering", () => {
+  it("getProjects excludes hidden projects by default", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE projects SET hidden = 1 WHERE dir_id = ?").run("-Users-jesse-prime-radiant");
+    const projects = getProjects(db);
+    expect(projects.length).toBe(0);
+  });
+
+  it("getProjects includes hidden projects when requested", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE projects SET hidden = 1 WHERE dir_id = ?").run("-Users-jesse-prime-radiant");
+    const projects = getProjects(db, undefined, undefined, true);
+    expect(projects.length).toBe(1);
+  });
+
+  it("getProjects session count excludes hidden sessions by default", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE sessions SET hidden = 1 WHERE session_id = ?").run("aaa-111");
+    const projects = getProjects(db);
+    expect(projects[0].sessionCount).toBe(1);
+  });
+
+  it("getProjects session count includes hidden sessions in admin mode", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE sessions SET hidden = 1 WHERE session_id = ?").run("aaa-111");
+    const projects = getProjects(db, undefined, undefined, true);
+    expect(projects[0].sessionCount).toBe(2);
+  });
+
+  it("getAllSessions excludes hidden sessions by default", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE sessions SET hidden = 1 WHERE session_id = ?").run("aaa-111");
+    const sessions = getAllSessions(db);
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].sessionId).toBe("bbb-222");
+  });
+
+  it("getAllSessions includes hidden sessions when requested", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE sessions SET hidden = 1 WHERE session_id = ?").run("aaa-111");
+    const sessions = getAllSessions(db, 100, 0, undefined, true);
+    expect(sessions.length).toBe(2);
+  });
+
+  it("getSessionsByProject excludes hidden sessions by default", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE sessions SET hidden = 1 WHERE session_id = ?").run("aaa-111");
+    const sessions = getSessionsByProject(db, "-Users-jesse-prime-radiant");
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].sessionId).toBe("bbb-222");
+  });
+
+  it("getSessionsByProject includes hidden sessions when requested", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE sessions SET hidden = 1 WHERE session_id = ?").run("aaa-111");
+    const sessions = getSessionsByProject(db, "-Users-jesse-prime-radiant", 100, 0, true);
+    expect(sessions.length).toBe(2);
+  });
+
+  it("searchSessions excludes hidden sessions by default", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE sessions SET hidden = 1 WHERE session_id = ?").run("aaa-111");
+    const results = searchSessions(db, "bug");
+    expect(results.length).toBe(0);
+  });
+
+  it("searchSessions includes hidden sessions when requested", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE sessions SET hidden = 1 WHERE session_id = ?").run("aaa-111");
+    const results = searchSessions(db, "bug", 50, undefined, true);
+    expect(results.length).toBe(1);
+  });
+
+  it("sessions include hidden field", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE sessions SET hidden = 1 WHERE session_id = ?").run("aaa-111");
+    const sessions = getAllSessions(db, 100, 0, undefined, true);
+    const hidden = sessions.find((s) => s.sessionId === "aaa-111");
+    const visible = sessions.find((s) => s.sessionId === "bbb-222");
+    expect(hidden!.hidden).toBe(1);
+    expect(visible!.hidden).toBe(0);
+  });
+});
+
 // =============================================================================
 // Multi-user import and queries
 // =============================================================================

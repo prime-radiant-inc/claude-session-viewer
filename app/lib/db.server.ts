@@ -148,18 +148,22 @@ export async function importMultiUserDataDir(db: Database.Database, dataDir: str
   }
 }
 
-export function getProjects(db: Database.Database, user?: string, hostname?: string): Array<{ dirId: string; name: string; path: string; sessionCount: number; user: string }> {
+export function getProjects(db: Database.Database, user?: string, hostname?: string, includeHidden = false): Array<{ dirId: string; name: string; path: string; sessionCount: number; user: string; hidden: number }> {
   const conditions: string[] = [];
-  const params: string[] = [];
+  const params: (string | number)[] = [];
+  if (!includeHidden) { conditions.push("p.hidden = 0"); }
   if (user) { conditions.push("p.user = ?"); params.push(user); }
   if (hostname) { conditions.push("p.hostname = ?"); params.push(hostname); }
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const countExpr = includeHidden
+    ? "COUNT(s.session_id)"
+    : "COUNT(CASE WHEN s.hidden = 0 THEN 1 END)";
   return db.prepare(`
-    SELECT p.dir_id as dirId, p.name, p.path, p.user, COUNT(s.session_id) as sessionCount
+    SELECT p.dir_id as dirId, p.name, p.path, p.user, p.hidden, ${countExpr} as sessionCount
     FROM projects p LEFT JOIN sessions s ON s.project_dir_id = p.dir_id
     ${where}
     GROUP BY p.dir_id ORDER BY p.name
-  `).all(...params) as Array<{ dirId: string; name: string; path: string; sessionCount: number; user: string }>;
+  `).all(...params) as Array<{ dirId: string; name: string; path: string; sessionCount: number; user: string; hidden: number }>;
 }
 
 export function getUsers(db: Database.Database): string[] {
@@ -176,59 +180,48 @@ export function getHosts(db: Database.Database, user?: string): string[] {
   return rows.map((r) => r.hostname);
 }
 
-export function getSessionsByProject(db: Database.Database, projectDirId: string, limit = 100, offset = 0): SessionMeta[] {
+export function getSessionsByProject(db: Database.Database, projectDirId: string, limit = 100, offset = 0, includeHidden = false): SessionMeta[] {
+  const hiddenFilter = includeHidden ? "" : " AND hidden = 0";
   return db.prepare(`
     SELECT session_id as sessionId, project_dir_id as projectId,
            (SELECT name FROM projects WHERE dir_id = project_dir_id) as projectName,
            first_prompt as firstPrompt, summary, message_count as messageCount,
            subagent_count as subagentCount, created, modified,
-           git_branch as gitBranch, project_path as projectPath, user
-    FROM sessions WHERE project_dir_id = ? ORDER BY modified DESC LIMIT ? OFFSET ?
+           git_branch as gitBranch, project_path as projectPath, user, hidden
+    FROM sessions WHERE project_dir_id = ?${hiddenFilter} ORDER BY modified DESC LIMIT ? OFFSET ?
   `).all(projectDirId, limit, offset) as SessionMeta[];
 }
 
-export function getAllSessions(db: Database.Database, limit = 100, offset = 0, user?: string): SessionMeta[] {
-  if (user) {
-    return db.prepare(`
-      SELECT session_id as sessionId, project_dir_id as projectId,
-             (SELECT name FROM projects WHERE dir_id = project_dir_id) as projectName,
-             first_prompt as firstPrompt, summary, message_count as messageCount,
-             subagent_count as subagentCount, created, modified,
-             git_branch as gitBranch, project_path as projectPath, user
-      FROM sessions WHERE user = ? ORDER BY modified DESC LIMIT ? OFFSET ?
-    `).all(user, limit, offset) as SessionMeta[];
-  }
+export function getAllSessions(db: Database.Database, limit = 100, offset = 0, user?: string, includeHidden = false): SessionMeta[] {
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+  if (!includeHidden) { conditions.push("hidden = 0"); }
+  if (user) { conditions.push("user = ?"); params.push(user); }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   return db.prepare(`
     SELECT session_id as sessionId, project_dir_id as projectId,
            (SELECT name FROM projects WHERE dir_id = project_dir_id) as projectName,
            first_prompt as firstPrompt, summary, message_count as messageCount,
            subagent_count as subagentCount, created, modified,
-           git_branch as gitBranch, project_path as projectPath, user
-    FROM sessions ORDER BY modified DESC LIMIT ? OFFSET ?
-  `).all(limit, offset) as SessionMeta[];
+           git_branch as gitBranch, project_path as projectPath, user, hidden
+    FROM sessions ${where} ORDER BY modified DESC LIMIT ? OFFSET ?
+  `).all(...params, limit, offset) as SessionMeta[];
 }
 
-export function searchSessions(db: Database.Database, query: string, limit = 50, user?: string): SessionMeta[] {
-  if (user) {
-    return db.prepare(`
-      SELECT s.session_id as sessionId, s.project_dir_id as projectId,
-             (SELECT name FROM projects WHERE dir_id = s.project_dir_id) as projectName,
-             s.first_prompt as firstPrompt, s.summary, s.message_count as messageCount,
-             s.subagent_count as subagentCount, s.created, s.modified,
-             s.git_branch as gitBranch, s.project_path as projectPath, s.user
-      FROM sessions_fts fts JOIN sessions s ON s.session_id = fts.session_id
-      WHERE sessions_fts MATCH ? AND s.user = ? ORDER BY rank LIMIT ?
-    `).all(query, user, limit) as SessionMeta[];
-  }
+export function searchSessions(db: Database.Database, query: string, limit = 50, user?: string, includeHidden = false): SessionMeta[] {
+  const conditions: string[] = ["sessions_fts MATCH ?"];
+  const params: (string | number)[] = [query];
+  if (!includeHidden) { conditions.push("s.hidden = 0"); }
+  if (user) { conditions.push("s.user = ?"); params.push(user); }
   return db.prepare(`
     SELECT s.session_id as sessionId, s.project_dir_id as projectId,
            (SELECT name FROM projects WHERE dir_id = s.project_dir_id) as projectName,
            s.first_prompt as firstPrompt, s.summary, s.message_count as messageCount,
            s.subagent_count as subagentCount, s.created, s.modified,
-           s.git_branch as gitBranch, s.project_path as projectPath, s.user
+           s.git_branch as gitBranch, s.project_path as projectPath, s.user, s.hidden
     FROM sessions_fts fts JOIN sessions s ON s.session_id = fts.session_id
-    WHERE sessions_fts MATCH ? ORDER BY rank LIMIT ?
-  `).all(query, limit) as SessionMeta[];
+    WHERE ${conditions.join(" AND ")} ORDER BY rank LIMIT ?
+  `).all(...params, limit) as SessionMeta[];
 }
 
 let _db: Database.Database | null = null;
@@ -255,7 +248,7 @@ async function importDataDir(db: Database.Database, dataDir: string): Promise<vo
   } else {
     await importFromDataDir(db, dataDir);
   }
-  const projects = getProjects(db);
+  const projects = getProjects(db, undefined, undefined, true);
   const total = projects.reduce((sum, p) => sum + p.sessionCount, 0);
   console.log(`Imported ${total} sessions across ${projects.length} projects`);
 }
