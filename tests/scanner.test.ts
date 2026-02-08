@@ -235,24 +235,27 @@ describe("discoverUserProjects", () => {
     expect(clank!.name).toBe("clank");
   });
 
-  it("filters out .worktrees directories", async () => {
+  it("associates worktree sessions with parent project", async () => {
     const hostDir = path.join(multiUserDir, "jesse", "paradise-park");
     mkdirSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace"), { recursive: true });
     writeFileSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace", "aaa-111.jsonl"), '{"type":"user"}\n');
-    // .worktrees dir and a worktree checkout inside it
     mkdirSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace--worktrees"), { recursive: true });
     writeFileSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace--worktrees", "bbb-222.jsonl"), '{"type":"user"}\n');
     mkdirSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace--worktrees-admin-crud"), { recursive: true });
     writeFileSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace--worktrees-admin-crud", "ccc-333.jsonl"), '{"type":"user"}\n');
     const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"), "jesse", "paradise-park");
-    const names = projects.map((p) => p.name);
-    expect(names).not.toContain("worktrees");
-    expect(names).not.toContain("worktrees-admin-crud");
-    expect(names).not.toContain("-worktrees");
-    expect(names).not.toContain("-worktrees-admin-crud");
-    // The parent lace project should still be there
-    const lace = projects.find((p) => p.dirId.includes("-Users-jesse-Documents-GitHub-lace") && !p.dirId.includes("worktrees"));
-    expect(lace).toBeDefined();
+    // Worktree names should NOT appear as separate projects
+    const uniqueNames = [...new Set(projects.map((p) => p.name))];
+    expect(uniqueNames).not.toContain("worktrees");
+    expect(uniqueNames).not.toContain("worktrees-admin-crud");
+    // Worktree entries should use the parent's dirId
+    const parentDirId = "jesse/paradise-park/-Users-jesse-Documents-GitHub-lace";
+    const entriesForParent = projects.filter((p) => p.dirId === parentDirId);
+    // Parent dir + .worktrees dir + worktree checkout = 3 entries with parent's dirId
+    expect(entriesForParent.length).toBe(3);
+    // Each entry has its own path for session discovery
+    const worktreePath = path.join(hostDir, "-Users-jesse-Documents-GitHub-lace--worktrees-admin-crud");
+    expect(entriesForParent.some((p) => p.path === worktreePath)).toBe(true);
   });
 });
 

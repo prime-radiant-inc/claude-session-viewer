@@ -134,13 +134,21 @@ export async function discoverUserProjects(userDir: string, user: string, hostna
     .sort();
 
   const projects: ProjectInfo[] = [];
+  const worktreeEntries: { parentDirName: string; path: string }[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const dirName = entry.name;
 
-    // Filter out .worktrees directories (encoded as --worktrees)
-    if (dirName.includes("--worktrees")) continue;
+    // Worktree dirs (.worktrees/) belong to the parent project
+    const worktreeMatch = dirName.match(/^(.+?)--worktrees/);
+    if (worktreeMatch) {
+      worktreeEntries.push({
+        parentDirName: worktreeMatch[1],
+        path: path.join(hostDir, dirName),
+      });
+      continue;
+    }
 
     let name: string;
     if (dirName.startsWith("-")) {
@@ -162,6 +170,17 @@ export async function discoverUserProjects(userDir: string, user: string, hostna
       dirId: `${user}/${hostname}/${dirName}`,
       name,
       path: path.join(hostDir, dirName),
+    });
+  }
+
+  // Add worktree entries using the parent project's dirId
+  for (const wt of worktreeEntries) {
+    const parentDirId = `${user}/${hostname}/${wt.parentDirName}`;
+    const parent = projects.find((p) => p.dirId === parentDirId);
+    projects.push({
+      dirId: parentDirId,
+      name: parent?.name ?? (wt.parentDirName.startsWith("-") ? parseProjectName(wt.parentDirName) : wt.parentDirName),
+      path: wt.path,
     });
   }
 

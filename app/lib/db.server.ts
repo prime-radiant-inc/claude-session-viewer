@@ -93,8 +93,12 @@ async function importProjects(db: Database.Database, projects: Array<{ dirId: st
   `);
   const getSessionMtime = db.prepare("SELECT file_mtime FROM sessions WHERE session_id = ?");
 
+  const seenDirIds = new Set<string>();
   for (const project of projects) {
-    upsertProject.run(project.dirId, project.name, project.path, user, hostname);
+    if (!seenDirIds.has(project.dirId)) {
+      upsertProject.run(project.dirId, project.name, project.path, user, hostname);
+      seenDirIds.add(project.dirId);
+    }
 
     const index = await readSessionsIndex(project.path);
     const sessionFiles = await discoverSessions(project.path);
