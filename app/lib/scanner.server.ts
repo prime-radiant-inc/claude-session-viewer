@@ -139,6 +139,22 @@ export async function discoverUserProjects(userDir: string, user: string, hostna
     });
   }
 
+  // Prefix matching on encoded dirs: if one encoded dirName is a prefix of
+  // another (with "-" separator), the longer one's name is just the suffix.
+  const encodedDirNames = entries
+    .filter((e) => e.isDirectory() && e.name.startsWith("-"))
+    .map((e) => e.name)
+    .sort();
+  for (const p of projects) {
+    const dirName = p.dirId.split("/").pop()!;
+    if (!dirName.startsWith("-")) continue;
+    for (const prefix of encodedDirNames) {
+      if (prefix !== dirName && dirName.startsWith(prefix + "-")) {
+        p.name = dirName.slice(prefix.length + 1);
+      }
+    }
+  }
+
   return projects.sort((a, b) => a.name.localeCompare(b.name));
 }
 

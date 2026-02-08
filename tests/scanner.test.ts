@@ -192,14 +192,34 @@ describe("discoverUserProjects", () => {
     expect(decoded!.name).toBe("clank");
   });
 
-  it("decodes encoded names as flat names without sub-project hierarchy", async () => {
+  it("uses prefix matching to extract last path component from encoded names", async () => {
     const hostDir = path.join(multiUserDir, "jesse", "paradise-park");
+    // Add parent and child encoded dirs — prefix matching should detect
+    // that -Users-jesse-prime-radiant is a prefix of -Users-jesse-prime-radiant-scribble
+    mkdirSync(path.join(hostDir, "-Users-jesse-prime-radiant"), { recursive: true });
+    writeFileSync(path.join(hostDir, "-Users-jesse-prime-radiant", "eee-555.jsonl"), '{"type":"user"}\n');
     mkdirSync(path.join(hostDir, "-Users-jesse-prime-radiant-scribble"), { recursive: true });
     writeFileSync(path.join(hostDir, "-Users-jesse-prime-radiant-scribble", "fff-666.jsonl"), '{"type":"user"}\n');
     const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"), "jesse", "paradise-park");
-    const sub = projects.find((p) => p.dirId.includes("-Users-jesse-prime-radiant-scribble"));
-    expect(sub).toBeDefined();
-    expect(sub!.name).toBe("prime-radiant-scribble");
+    const parent = projects.find((p) => p.dirId.includes("-Users-jesse-prime-radiant") && !p.dirId.includes("scribble"));
+    expect(parent).toBeDefined();
+    expect(parent!.name).toBe("prime-radiant");
+    const child = projects.find((p) => p.dirId.includes("-Users-jesse-prime-radiant-scribble"));
+    expect(child).toBeDefined();
+    expect(child!.name).toBe("scribble");
+  });
+
+  it("uses prefix matching for deep paths like Documents-GitHub-lace", async () => {
+    const hostDir = path.join(multiUserDir, "jesse", "paradise-park");
+    mkdirSync(path.join(hostDir, "-Users-jesse-Documents-GitHub"), { recursive: true });
+    writeFileSync(path.join(hostDir, "-Users-jesse-Documents-GitHub", "aaa-111.jsonl"), '{"type":"user"}\n');
+    mkdirSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace"), { recursive: true });
+    writeFileSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace", "bbb-222.jsonl"), '{"type":"user"}\n');
+    const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"), "jesse", "paradise-park");
+    const parent = projects.find((p) => p.dirId.includes("-Users-jesse-Documents-GitHub") && !p.dirId.includes("lace"));
+    expect(parent!.name).toBe("Documents-GitHub");
+    const child = projects.find((p) => p.dirId.includes("-Users-jesse-Documents-GitHub-lace"));
+    expect(child!.name).toBe("lace");
   });
 });
 
