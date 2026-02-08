@@ -252,6 +252,7 @@ export default function SessionDetail() {
             showToolCalls={showToolCalls}
             showThinking={showThinking}
             userName={data.user || undefined}
+            assistantLabel={data.agent === "codex" ? "Codex" : undefined}
           />
         </div>
       </div>

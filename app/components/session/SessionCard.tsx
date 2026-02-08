@@ -53,6 +53,11 @@ export function SessionCard({ session, showUser, admin }: { session: SessionMeta
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-slate">
         <span>{formatDate(session.modified)} {formatTime(session.modified)}</span>
+        {session.agent && session.agent !== "claude" && (
+          <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-medium">
+            {session.agent}
+          </span>
+        )}
         {showUser && session.user && (
           <span className="text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
             {session.user}

@@ -24,6 +24,7 @@ interface InfiniteMessageListProps {
   showToolCalls: boolean;
   showThinking: boolean;
   userName?: string;
+  assistantLabel?: string;
 }
 
 export function InfiniteMessageList({
@@ -39,6 +40,7 @@ export function InfiniteMessageList({
   showToolCalls,
   showThinking,
   userName,
+  assistantLabel,
 }: InfiniteMessageListProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -237,6 +239,7 @@ export function InfiniteMessageList({
                 showToolCalls={showToolCalls}
                 showThinking={showThinking}
                 userName={userName}
+                assistantLabel={assistantLabel}
               />
             </div>
             {switcher && (
