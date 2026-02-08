@@ -74,6 +74,7 @@ interface MessageBlockProps {
   showToolCalls?: boolean;
   showThinking?: boolean;
   userName?: string;
+  assistantLabel?: string;
 }
 
 export function MessageBlock({
@@ -86,6 +87,7 @@ export function MessageBlock({
   showToolCalls = true,
   showThinking = true,
   userName,
+  assistantLabel,
 }: MessageBlockProps) {
   const isUser = message.type === "user";
 
@@ -108,7 +110,7 @@ export function MessageBlock({
   });
   if (!isUser && !hasVisibleContent) return null;
 
-  const displayName = isUser ? (userName || "You") : "Assistant";
+  const displayName = isUser ? (userName || "You") : (assistantLabel || "Assistant");
 
   const header = !isContinuation && (
     <div className="flex items-center gap-2 mb-1 -ml-2">

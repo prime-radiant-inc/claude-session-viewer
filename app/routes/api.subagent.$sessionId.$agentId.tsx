@@ -1,6 +1,7 @@
 import type { Route } from "./+types/api.subagent.$sessionId.$agentId";
 import { ensureInitialized } from "~/lib/db.server";
-import { parseSessionFile, buildConversationThread } from "~/lib/parser.server";
+import { parseSessionFile } from "~/lib/parser.server";
+import { buildMessageTree, resolveActivePath } from "~/lib/tree";
 import path from "path";
 
 export async function loader({ params }: Route.LoaderArgs) {
@@ -24,7 +25,8 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   const filePath = path.join(project.path, sessionId!, "subagents", `agent-${agentId}.jsonl`);
   const entries = await parseSessionFile(filePath);
-  const messages = buildConversationThread(entries);
+  const roots = buildMessageTree(entries);
+  const messages = resolveActivePath(roots);
 
   return Response.json({ messages });
 }
