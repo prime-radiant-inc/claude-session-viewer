@@ -7,8 +7,11 @@ import { ConversationMinimap } from "~/components/session/ConversationMinimap";
 import { ensureInitialized } from "~/lib/db.server";
 import { estimateContentLength } from "~/lib/minimap";
 import { parseSessionFile, readSubagentFirstPrompt } from "~/lib/parser.server";
+import { parseCodexSessionFile, buildCodexMessages } from "~/lib/codex-parser.server";
 import { buildMessageTree, resolveActivePath, getBranchPoints } from "~/lib/tree";
 import { discoverSubagents } from "~/lib/scanner.server";
+import type { ParsedMessage } from "~/lib/types";
+import type { BranchPoint } from "~/lib/tree";
 
 export function meta({ data }: Route.MetaArgs) {
   const title = data?.firstPrompt
@@ -23,7 +26,7 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   const session = db.prepare(`
     SELECT session_id, project_dir_id, file_path, first_prompt, summary,
-           message_count, subagent_count, created, modified, git_branch, project_path
+           message_count, subagent_count, created, modified, git_branch, project_path, agent
     FROM sessions WHERE session_id = ?
   `).get(sessionId) as {
     session_id: string;
@@ -37,6 +40,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     modified: string;
     git_branch: string;
     project_path: string;
+    agent: string;
   } | undefined;
 
   if (!session) {
@@ -44,45 +48,56 @@ export async function loader({ params }: Route.LoaderArgs) {
   }
 
   const dirId = session.project_dir_id;
-  const project = db.prepare("SELECT path FROM projects WHERE dir_id = ?")
-    .get(dirId) as { path: string } | undefined;
+  const isCodex = session.agent === "codex";
 
-  const entries = await parseSessionFile(session.file_path);
-  const roots = buildMessageTree(entries);
-  const messages = resolveActivePath(roots);
-  const branchPoints = getBranchPoints(roots, messages);
-
-  const subagentFiles = project
-    ? await discoverSubagents(project.path, sessionId!)
-    : [];
-  const subagents = subagentFiles.map((s) => ({
-    agentId: s.agentId,
-    filePath: s.filePath,
-  }));
-
-  // Build tool_use_id -> agentId mapping by matching Task prompts to subagent first messages
+  let messages: ParsedMessage[];
+  let branchPoints: BranchPoint[];
+  let subagents: Array<{ agentId: string; filePath: string }> = [];
   const subagentMap: Record<string, string> = {};
-  if (subagentFiles.length > 0) {
-    // Collect Task tool_use prompts from session messages
-    const taskPrompts: Array<{ toolUseId: string; prompt: string }> = [];
-    for (const msg of messages) {
-      for (const block of msg.content) {
-        if (block.type === "tool_use" && block.name === "Task") {
-          const prompt = (block.input as Record<string, unknown>).prompt;
-          if (typeof prompt === "string") {
-            taskPrompts.push({ toolUseId: block.id, prompt });
+
+  if (isCodex) {
+    // Codex sessions are linear — no tree, no subagents
+    const codexEntries = await parseCodexSessionFile(session.file_path);
+    messages = buildCodexMessages(codexEntries);
+    branchPoints = [];
+  } else {
+    const project = db.prepare("SELECT path FROM projects WHERE dir_id = ?")
+      .get(dirId) as { path: string } | undefined;
+
+    const entries = await parseSessionFile(session.file_path);
+    const roots = buildMessageTree(entries);
+    messages = resolveActivePath(roots);
+    branchPoints = getBranchPoints(roots, messages);
+
+    const subagentFiles = project
+      ? await discoverSubagents(project.path, sessionId!)
+      : [];
+    subagents = subagentFiles.map((s) => ({
+      agentId: s.agentId,
+      filePath: s.filePath,
+    }));
+
+    // Build tool_use_id -> agentId mapping by matching Task prompts to subagent first messages
+    if (subagentFiles.length > 0) {
+      const taskPrompts: Array<{ toolUseId: string; prompt: string }> = [];
+      for (const msg of messages) {
+        for (const block of msg.content) {
+          if (block.type === "tool_use" && block.name === "Task") {
+            const prompt = (block.input as Record<string, unknown>).prompt;
+            if (typeof prompt === "string") {
+              taskPrompts.push({ toolUseId: block.id, prompt });
+            }
           }
         }
       }
-    }
 
-    // Read first prompt from each subagent file and match
-    for (const sub of subagentFiles) {
-      const firstPrompt = await readSubagentFirstPrompt(sub.filePath);
-      if (!firstPrompt) continue;
-      const match = taskPrompts.find((tp) => tp.prompt === firstPrompt);
-      if (match) {
-        subagentMap[match.toolUseId] = sub.agentId;
+      for (const sub of subagentFiles) {
+        const firstPrompt = await readSubagentFirstPrompt(sub.filePath);
+        if (!firstPrompt) continue;
+        const match = taskPrompts.find((tp) => tp.prompt === firstPrompt);
+        if (match) {
+          subagentMap[match.toolUseId] = sub.agentId;
+        }
       }
     }
   }
@@ -102,6 +117,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     sessionId,
     projectId: dirId,
     user: effectiveUser,
+    agent: session.agent,
     firstPrompt: session.first_prompt,
     summary: session.summary,
     created: session.created,
