@@ -88,22 +88,6 @@ export function extractCodexMetadata(entries: CodexRawEntry[]): CodexSessionMeta
   return meta;
 }
 
-/** Predicates for system context messages that should be filtered out */
-function isSystemContextMessage(payload: Record<string, unknown>): boolean {
-  if (payload.role === "developer") return true;
-  if (payload.role !== "user") return false;
-
-  const content = payload.content as Array<Record<string, unknown>> | undefined;
-  if (!Array.isArray(content) || content.length === 0) return false;
-
-  const text = String(content[0].text || "");
-  if (text.startsWith("<environment_context>")) return true;
-  if (text.startsWith("# AGENTS.md")) return true;
-  if (text.startsWith("<INSTRUCTIONS>")) return true;
-  if (text.startsWith("<user_instructions>")) return true;
-  return false;
-}
-
 export function buildCodexMessages(entries: CodexRawEntry[]): ParsedMessage[] {
   const messages: ParsedMessage[] = [];
   let msgIndex = 0;
@@ -162,8 +146,9 @@ export function buildCodexMessages(entries: CodexRawEntry[]): ParsedMessage[] {
     if (entry.type === "response_item") {
       const itemType = p.type;
 
-      // Filter system context messages
-      if (itemType === "message" && isSystemContextMessage(p)) continue;
+      // Skip all response_item messages — system context is filtered, and user/assistant
+      // text is duplicated via event_msg (user_message / agent_message) which we use instead
+      if (itemType === "message") continue;
 
       if (itemType === "reasoning") {
         if (!currentAssistantTimestamp) {

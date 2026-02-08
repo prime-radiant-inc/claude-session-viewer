@@ -61,8 +61,12 @@ export async function discoverCodexSessions(codexDir: string): Promise<SessionFi
           const filePath = path.join(dayDir, file);
           const sessionId = extractSessionId(file);
           if (!sessionId) continue;
-          const stats = await stat(filePath);
-          sessions.push({ sessionId, filePath, mtime: stats.mtime });
+          try {
+            const stats = await stat(filePath);
+            sessions.push({ sessionId, filePath, mtime: stats.mtime });
+          } catch {
+            continue;
+          }
         }
       }
     }
