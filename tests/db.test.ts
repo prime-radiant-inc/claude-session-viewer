@@ -77,6 +77,29 @@ describe("importFromDataDir", () => {
   });
 });
 
+describe("rescan preserves hidden state", () => {
+  it("does not reset hidden flag on projects during reimport", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE projects SET hidden = 1 WHERE dir_id = ?").run("-Users-jesse-prime-radiant");
+    await importFromDataDir(db, testDir);
+    const row = db.prepare("SELECT hidden FROM projects WHERE dir_id = ?").get("-Users-jesse-prime-radiant") as { hidden: number };
+    expect(row.hidden).toBe(1);
+  });
+
+  it("does not reset hidden flag on sessions during reimport", async () => {
+    await importFromDataDir(db, testDir);
+    db.prepare("UPDATE sessions SET hidden = 1 WHERE session_id = ?").run("aaa-111");
+    // Touch the file to force re-import by bumping mtime
+    const projectDir = path.join(testDir, "-Users-jesse-prime-radiant");
+    const now = Date.now() / 1000 + 10;
+    const { utimesSync } = await import("fs");
+    utimesSync(path.join(projectDir, "aaa-111.jsonl"), now, now);
+    await importFromDataDir(db, testDir);
+    const row = db.prepare("SELECT hidden FROM sessions WHERE session_id = ?").get("aaa-111") as { hidden: number };
+    expect(row.hidden).toBe(1);
+  });
+});
+
 describe("searchSessions", () => {
   it("finds sessions by summary text", async () => {
     await importFromDataDir(db, testDir);

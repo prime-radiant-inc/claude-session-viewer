@@ -74,12 +74,22 @@ export function createDb(dbPath: string): Database.Database {
 }
 
 async function importProjects(db: Database.Database, projects: Array<{ dirId: string; name: string; path: string }>, user: string, hostname: string): Promise<void> {
-  const upsertProject = db.prepare("INSERT OR REPLACE INTO projects (dir_id, name, path, user, hostname) VALUES (?, ?, ?, ?, ?)");
+  const upsertProject = db.prepare(`
+    INSERT INTO projects (dir_id, name, path, user, hostname) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(dir_id) DO UPDATE SET name=excluded.name, path=excluded.path, user=excluded.user, hostname=excluded.hostname
+  `);
   const upsertSession = db.prepare(`
-    INSERT OR REPLACE INTO sessions
+    INSERT INTO sessions
     (session_id, project_dir_id, first_prompt, summary, message_count, subagent_count,
      created, modified, git_branch, project_path, file_path, file_mtime, user)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(session_id) DO UPDATE SET
+      project_dir_id=excluded.project_dir_id, first_prompt=excluded.first_prompt,
+      summary=excluded.summary, message_count=excluded.message_count,
+      subagent_count=excluded.subagent_count, created=excluded.created,
+      modified=excluded.modified, git_branch=excluded.git_branch,
+      project_path=excluded.project_path, file_path=excluded.file_path,
+      file_mtime=excluded.file_mtime, user=excluded.user
   `);
   const getSessionMtime = db.prepare("SELECT file_mtime FROM sessions WHERE session_id = ?");
 
