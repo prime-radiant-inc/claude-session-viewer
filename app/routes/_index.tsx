@@ -1,4 +1,4 @@
-import { useLoaderData, useSearchParams, useNavigation, Form } from "react-router";
+import { useLoaderData, useSearchParams, useNavigation, useRevalidator, Form } from "react-router";
 import type { Route } from "./+types/_index";
 import { AppShell } from "~/components/layout/AppShell";
 import { SessionCard } from "~/components/session/SessionCard";
@@ -15,22 +15,23 @@ export async function loader({ request }: Route.LoaderArgs) {
   const userFilter = url.searchParams.get("user");
   const hostFilter = url.searchParams.get("host");
   const query = url.searchParams.get("q");
+  const admin = url.searchParams.get("admin") === "1";
   const db = await ensureInitialized();
 
   const users = getUsers(db);
   const hosts = getHosts(db, userFilter || undefined);
-  const projects = getProjects(db, userFilter || undefined, hostFilter || undefined);
+  const projects = getProjects(db, userFilter || undefined, hostFilter || undefined, admin);
 
   let sessions: SessionMeta[];
   if (query) {
-    sessions = searchSessions(db, query, 50, userFilter || undefined);
+    sessions = searchSessions(db, query, 50, userFilter || undefined, admin);
   } else if (projectFilter) {
-    sessions = getSessionsByProject(db, projectFilter);
+    sessions = getSessionsByProject(db, projectFilter, 100, 0, admin);
   } else {
-    sessions = getAllSessions(db, 100, 0, userFilter || undefined);
+    sessions = getAllSessions(db, 100, 0, userFilter || undefined, admin);
   }
 
-  return { users, hosts, projects, sessions, projectFilter, userFilter, hostFilter, query };
+  return { users, hosts, projects, sessions, projectFilter, userFilter, hostFilter, query, admin };
 }
 
 function formatDateHeader(iso: string): string {
@@ -62,17 +63,50 @@ function groupSessionsByDate(sessions: SessionMeta[]): Array<{ label: string; se
 }
 
 export default function Index() {
-  const { users, hosts, projects, sessions, projectFilter, userFilter, hostFilter, query } = useLoaderData<typeof loader>();
+  const { users, hosts, projects, sessions, projectFilter, userFilter, hostFilter, query, admin } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
+  const revalidator = useRevalidator();
   const isLoading = navigation.state === "loading";
 
   const totalSessions = projects.reduce((sum, p) => sum + p.sessionCount, 0);
   const showUserBadge = users.length > 0 && !userFilter;
   const sessionGroups = groupSessionsByDate(sessions);
 
+  function toggleAdmin() {
+    const next = new URLSearchParams(searchParams);
+    if (admin) {
+      next.delete("admin");
+    } else {
+      next.set("admin", "1");
+    }
+    setSearchParams(next);
+  }
+
+  async function toggleProjectHidden(dirId: string, currentlyHidden: number) {
+    await fetch("/api/hide-project", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dirId, hidden: !currentlyHidden }),
+    });
+    revalidator.revalidate();
+  }
+
+  const adminToggle = (
+    <button
+      onClick={toggleAdmin}
+      className={`text-xs px-2.5 py-1 rounded border transition-colors ${
+        admin
+          ? "bg-amber-100 border-amber-300 text-amber-800"
+          : "border-edge text-slate hover:text-ink"
+      }`}
+    >
+      Admin
+    </button>
+  );
+
   return (
-    <AppShell>
+    <AppShell headerRight={adminToggle}>
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-64 shrink-0 border-r border-edge bg-white px-4 py-6 min-h-[calc(100vh-49px)]">
@@ -82,7 +116,7 @@ export default function Index() {
               <p className="section-label mb-3">Users</p>
               <nav className="space-y-1 mb-6">
                 <button
-                  onClick={() => setSearchParams({})}
+                  onClick={() => setSearchParams(admin ? { admin: "1" } : {})}
                   className={`block w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
                     !userFilter && !projectFilter && !query ? "bg-teal-wash text-teal font-medium" : "text-slate hover:text-ink"
                   }`}
@@ -92,7 +126,7 @@ export default function Index() {
                 {users.map((user) => (
                   <button
                     key={user}
-                    onClick={() => setSearchParams({ user })}
+                    onClick={() => setSearchParams(admin ? { user, admin: "1" } : { user })}
                     className={`block w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
                       userFilter === user ? "bg-teal-wash text-teal font-medium" : "text-slate hover:text-ink"
                     }`}
@@ -110,7 +144,7 @@ export default function Index() {
               <p className="section-label mb-3">Hosts</p>
               <nav className="space-y-1 mb-6">
                 <button
-                  onClick={() => setSearchParams({ user: userFilter })}
+                  onClick={() => setSearchParams(admin ? { user: userFilter, admin: "1" } : { user: userFilter })}
                   className={`block w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
                     !hostFilter ? "bg-teal-wash text-teal font-medium" : "text-slate hover:text-ink"
                   }`}
@@ -120,7 +154,11 @@ export default function Index() {
                 {hosts.map((host) => (
                   <button
                     key={host}
-                    onClick={() => setSearchParams({ user: userFilter, host })}
+                    onClick={() => {
+                      const p: Record<string, string> = { user: userFilter!, host };
+                      if (admin) p.admin = "1";
+                      setSearchParams(p);
+                    }}
                     className={`block w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
                       hostFilter === host ? "bg-teal-wash text-teal font-medium" : "text-slate hover:text-ink"
                     }`}
@@ -139,6 +177,7 @@ export default function Index() {
                 const p: Record<string, string> = {};
                 if (userFilter) p.user = userFilter;
                 if (hostFilter) p.host = hostFilter;
+                if (admin) p.admin = "1";
                 setSearchParams(p);
               }}
               className={`block w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
@@ -149,21 +188,32 @@ export default function Index() {
               <span className="text-xs text-slate ml-1">({totalSessions})</span>
             </button>
             {projects.map((project) => (
-              <button
-                key={project.dirId}
-                onClick={() => {
-                  const p: Record<string, string> = { project: project.dirId };
-                  if (userFilter) p.user = userFilter;
-                  if (hostFilter) p.host = hostFilter;
-                  setSearchParams(p);
-                }}
-                className={`block w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
-                  projectFilter === project.dirId ? "bg-teal-wash text-teal font-medium" : "text-slate hover:text-ink"
-                }`}
-              >
-                {project.name}
-                <span className="text-xs text-slate ml-1">({project.sessionCount})</span>
-              </button>
+              <div key={project.dirId} className={`flex items-center gap-1 ${project.hidden ? "opacity-40" : ""}`}>
+                <button
+                  onClick={() => {
+                    const p: Record<string, string> = { project: project.dirId };
+                    if (userFilter) p.user = userFilter;
+                    if (hostFilter) p.host = hostFilter;
+                    if (admin) p.admin = "1";
+                    setSearchParams(p);
+                  }}
+                  className={`flex-1 text-left px-2 py-1.5 rounded text-sm transition-colors ${
+                    projectFilter === project.dirId ? "bg-teal-wash text-teal font-medium" : "text-slate hover:text-ink"
+                  }`}
+                >
+                  {project.name}
+                  <span className="text-xs text-slate ml-1">({project.sessionCount})</span>
+                </button>
+                {admin && (
+                  <button
+                    onClick={() => toggleProjectHidden(project.dirId, project.hidden)}
+                    className="shrink-0 text-xs px-1.5 py-0.5 rounded border border-edge hover:bg-panel transition-colors"
+                    title={project.hidden ? "Unhide project" : "Hide project"}
+                  >
+                    {project.hidden ? "Show" : "Hide"}
+                  </button>
+                )}
+              </div>
             ))}
           </nav>
         </aside>
@@ -182,6 +232,7 @@ export default function Index() {
             {projectFilter && <input type="hidden" name="project" value={projectFilter} />}
             {userFilter && <input type="hidden" name="user" value={userFilter} />}
             {hostFilter && <input type="hidden" name="host" value={hostFilter} />}
+            {admin && <input type="hidden" name="admin" value="1" />}
           </Form>
 
           {/* Results */}
@@ -194,7 +245,7 @@ export default function Index() {
                   <p className="section-label mb-2">{group.label}</p>
                   <div className="space-y-2">
                     {group.sessions.map((session) => (
-                      <SessionCard key={session.sessionId} session={session} showUser={showUserBadge} />
+                      <SessionCard key={session.sessionId} session={session} showUser={showUserBadge} admin={admin} />
                     ))}
                   </div>
                 </div>
