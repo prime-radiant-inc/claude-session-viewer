@@ -37,7 +37,7 @@ export function SubagentPanel({ projectId, sessionId, agentId, description }: Su
   }
 
   return (
-    <div className="border-l-2 border-teal-light pl-4 my-2">
+    <div className="my-2 ml-4 bg-teal-wash/30 rounded-lg px-3 py-2">
       <button
         onClick={handleToggle}
         className="text-xs text-teal hover:text-ink cursor-pointer select-none flex items-center gap-1"

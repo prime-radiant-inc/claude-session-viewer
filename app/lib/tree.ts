@@ -112,7 +112,14 @@ export function getBranchPoints(
       deepestTimestamp(b).localeCompare(deepestTimestamp(a)),
     );
 
-    const paths = sortedChildren.map((child) => flattenBranch(child));
+    // Filter out branches with no substantive content (garbage-collected sidechains).
+    // A branch is empty if it only contains tool results and/or assistant messages
+    // whose content is purely tool_use blocks with no text.
+    const paths = sortedChildren
+      .map((child) => flattenBranch(child))
+      .filter((path) => path.some((m) => hasSubstantiveContent(m)));
+
+    if (paths.length <= 1) continue;
 
     branchPoints.push({
       messageIndex: i,
@@ -192,6 +199,12 @@ function flattenBranch(node: MessageNode): ParsedMessage[] {
     result.push(current.entry);
   }
   return result;
+}
+
+/** A message has substantive content if it contains user text or assistant text (not just tool calls/results). */
+function hasSubstantiveContent(msg: ParsedMessage): boolean {
+  if (msg.isToolResult) return false;
+  return msg.content.some((block) => block.type === "text" && block.text.trim().length > 0);
 }
 
 /** Recursively collect all nodes into a map by uuid. */

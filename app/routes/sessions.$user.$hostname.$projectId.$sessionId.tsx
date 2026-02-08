@@ -18,8 +18,7 @@ export function meta({ data }: Route.MetaArgs) {
 }
 
 export async function loader({ params }: Route.LoaderArgs) {
-  const { user, hostname, projectId, sessionId } = params;
-  const dirId = `${user}/${hostname}/${projectId}`;
+  const { user, sessionId } = params;
   const db = await ensureInitialized();
 
   const session = db.prepare(`
@@ -44,6 +43,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     throw new Response("Session not found", { status: 404 });
   }
 
+  const dirId = session.project_dir_id;
   const project = db.prepare("SELECT path FROM projects WHERE dir_id = ?")
     .get(dirId) as { path: string } | undefined;
 
@@ -96,10 +96,12 @@ export async function loader({ params }: Route.LoaderArgs) {
     }
   }
 
+  const effectiveUser = user === "_" ? "" : (user ?? "");
+
   return {
     sessionId,
     projectId: dirId,
-    user,
+    user: effectiveUser,
     firstPrompt: session.first_prompt,
     summary: session.summary,
     created: session.created,
@@ -121,10 +123,34 @@ export default function SessionDetail() {
   const [viewportBottom, setViewportBottom] = useState(0.1);
   const [scrollToIndex, setScrollToIndex] = useState<number | null>(null);
   const [pathSelections, setPathSelections] = useState<Record<string, number>>({});
+  const [showToolCalls, setShowToolCalls] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("showToolCalls") !== "false";
+  });
+  const [showThinking, setShowThinking] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("showThinking") !== "false";
+  });
 
   useEffect(() => {
     setPathSelections({});
   }, [data.sessionId]);
+
+  const toggleToolCalls = useCallback(() => {
+    setShowToolCalls((prev) => {
+      const next = !prev;
+      localStorage.setItem("showToolCalls", String(next));
+      return next;
+    });
+  }, []);
+
+  const toggleThinking = useCallback(() => {
+    setShowThinking((prev) => {
+      const next = !prev;
+      localStorage.setItem("showThinking", String(next));
+      return next;
+    });
+  }, []);
 
   const handlePathSwitch = useCallback((forkUuid: string, pathIndex: number) => {
     setPathSelections((prev) => ({ ...prev, [forkUuid]: pathIndex }));
@@ -173,6 +199,26 @@ export default function SessionDetail() {
                 </span>
               )}
               <span>{(data.totalInput + data.totalOutput).toLocaleString()} tokens</span>
+              <button
+                onClick={toggleThinking}
+                className={`px-1.5 py-0.5 rounded transition-colors ${
+                  showThinking
+                    ? "bg-panel text-slate hover:text-ink"
+                    : "bg-teal-wash text-teal hover:text-ink"
+                }`}
+              >
+                {showThinking ? "Hide thinking" : "Show thinking"}
+              </button>
+              <button
+                onClick={toggleToolCalls}
+                className={`px-1.5 py-0.5 rounded transition-colors ${
+                  showToolCalls
+                    ? "bg-panel text-slate hover:text-ink"
+                    : "bg-teal-wash text-teal hover:text-ink"
+                }`}
+              >
+                {showToolCalls ? "Hide tools" : "Show tools"}
+              </button>
             </div>
           </div>
 
@@ -184,10 +230,13 @@ export default function SessionDetail() {
             onPathSwitch={handlePathSwitch}
             subagentMap={data.subagentMap}
             projectId={data.projectId}
-            sessionId={data.sessionId}
+            sessionId={data.sessionId!}
             onViewportChange={handleViewportChange}
             scrollToIndex={scrollToIndex}
             onScrollComplete={handleScrollComplete}
+            showToolCalls={showToolCalls}
+            showThinking={showThinking}
+            userName={data.user || undefined}
           />
         </div>
       </div>

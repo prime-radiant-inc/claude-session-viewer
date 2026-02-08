@@ -29,7 +29,7 @@ export function SessionCard({ session, showUser, admin }: { session: SessionMeta
 
   return (
     <Link
-      to={`/sessions/${session.projectId}/${session.sessionId}`}
+      to={`/sessions/${session.user || "_"}/${session.hostname || "_"}/${session.projectId}/${session.sessionId}`}
       className={`card block px-4 py-3 ${isHidden ? "opacity-40" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">

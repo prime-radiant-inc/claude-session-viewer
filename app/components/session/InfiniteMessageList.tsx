@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import type { ParsedMessage } from "~/lib/types";
+import type { ParsedMessage, ContentBlock } from "~/lib/types";
 import type { BranchPoint } from "~/lib/tree";
 import { MessageBlock } from "./MessageBlock";
 import { BranchSwitcher } from "./BranchSwitcher";
 
 const BATCH_SIZE = 50;
+
+export interface ToolResultEntry {
+  content: string | ContentBlock[];
+  isError: boolean;
+}
 
 interface InfiniteMessageListProps {
   messages: ParsedMessage[];
@@ -17,6 +22,9 @@ interface InfiniteMessageListProps {
   onViewportChange: (topFraction: number, bottomFraction: number) => void;
   scrollToIndex: number | null;
   onScrollComplete: () => void;
+  showToolCalls: boolean;
+  showThinking: boolean;
+  userName?: string;
 }
 
 export function InfiniteMessageList({
@@ -30,6 +38,9 @@ export function InfiniteMessageList({
   onViewportChange,
   scrollToIndex,
   onScrollComplete,
+  showToolCalls,
+  showThinking,
+  userName,
 }: InfiniteMessageListProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -41,9 +52,6 @@ export function InfiniteMessageList({
   );
 
   // Build effective message list based on path selections.
-  // When all selections are 0 (default), this equals `messages` exactly.
-  // When a user picks an alternate at a branch point, everything after the
-  // fork is replaced with that branch's messages (dead-end).
   const effectiveMessages = useMemo(() => {
     for (const bp of branchPoints) {
       const selected = Math.min(pathSelections[bp.forkMessageUuid] ?? 0, bp.paths.length - 1);
@@ -57,8 +65,47 @@ export function InfiniteMessageList({
     return messages;
   }, [messages, branchPoints, pathSelections]);
 
+  // Build tool result map: tool_use_id -> result content.
+  // Also track which message uuids are fully consumed by inline rendering.
+  const { toolResultMap, consumedUuids } = useMemo(() => {
+    const map = new Map<string, ToolResultEntry>();
+    const consumed = new Set<string>();
+
+    for (const msg of effectiveMessages) {
+      if (!msg.isToolResult) continue;
+
+      let allConsumed = true;
+      for (const block of msg.content) {
+        if (block.type === "tool_result") {
+          map.set(block.tool_use_id, {
+            content: block.content,
+            isError: block.is_error ?? false,
+          });
+        } else {
+          // Has non-tool-result content — don't fully consume
+          allConsumed = false;
+        }
+      }
+      if (allConsumed) consumed.add(msg.uuid);
+    }
+
+    return { toolResultMap: map, consumedUuids: consumed };
+  }, [effectiveMessages]);
+
+  // Compute continuation flags. A new turn starts when a non-tool-result
+  // user message appears. Everything else is a continuation of the current turn.
+  const continuationFlags = useMemo(() => {
+    const flags: boolean[] = new Array(effectiveMessages.length).fill(false);
+    for (let i = 1; i < effectiveMessages.length; i++) {
+      const msg = effectiveMessages[i];
+      const isRealUserMessage = msg.type === "user" && !msg.isToolResult;
+      // A real user message is never a continuation — it starts a new turn
+      flags[i] = !isRealUserMessage;
+    }
+    return flags;
+  }, [effectiveMessages]);
+
   // Determine which branch points are visible in the current effective list.
-  // Once we hit the switched branch point, no later ones are visible.
   const visibleBranchPoints = useMemo(() => {
     const visible: Array<{ position: number; branchPoint: BranchPoint }> = [];
     for (const bp of branchPoints) {
@@ -156,25 +203,32 @@ export function InfiniteMessageList({
   }, [scrollToIndex, renderedCount, effectiveMessages.length, onScrollComplete]);
 
   return (
-    <div ref={containerRef} className="space-y-4">
+    <div ref={containerRef} className="space-y-6">
       {effectiveMessages.slice(0, renderedCount).map((message, i) => {
         const isAlternate = !activeMessageUuids.has(message.uuid);
         const switcher = switcherByIndex.get(i);
+        const isConsumed = consumedUuids.has(message.uuid);
 
         return (
           <div key={message.uuid} id={`msg-${i}`}>
             <div
               className={
                 isAlternate
-                  ? "border-l-2 border-dashed border-amber-400 pl-3"
+                  ? "bg-amber-100/40 rounded-lg px-3 py-1"
                   : ""
               }
             >
               <MessageBlock
                 message={message}
+                isContinuation={continuationFlags[i]}
+                isConsumedToolResult={isConsumed}
+                toolResultMap={toolResultMap}
                 subagentMap={subagentMap}
                 projectId={projectId}
                 sessionId={sessionId}
+                showToolCalls={showToolCalls}
+                showThinking={showThinking}
+                userName={userName}
               />
             </div>
             {switcher && (

@@ -199,6 +199,7 @@ export function getSessionsByProject(db: Database.Database, projectName: string,
   return db.prepare(`
     SELECT session_id as sessionId, project_dir_id as projectId,
            (SELECT name FROM projects WHERE dir_id = project_dir_id) as projectName,
+           (SELECT hostname FROM projects WHERE dir_id = project_dir_id) as hostname,
            first_prompt as firstPrompt, summary, message_count as messageCount,
            subagent_count as subagentCount, created, modified,
            git_branch as gitBranch, project_path as projectPath, user, hidden
@@ -216,6 +217,7 @@ export function getAllSessions(db: Database.Database, limit = 100, offset = 0, u
   return db.prepare(`
     SELECT session_id as sessionId, project_dir_id as projectId,
            (SELECT name FROM projects WHERE dir_id = project_dir_id) as projectName,
+           (SELECT hostname FROM projects WHERE dir_id = project_dir_id) as hostname,
            first_prompt as firstPrompt, summary, message_count as messageCount,
            subagent_count as subagentCount, created, modified,
            git_branch as gitBranch, project_path as projectPath, user, hidden
@@ -231,6 +233,7 @@ export function searchSessions(db: Database.Database, query: string, limit = 50,
   return db.prepare(`
     SELECT s.session_id as sessionId, s.project_dir_id as projectId,
            (SELECT name FROM projects WHERE dir_id = s.project_dir_id) as projectName,
+           (SELECT hostname FROM projects WHERE dir_id = s.project_dir_id) as hostname,
            s.first_prompt as firstPrompt, s.summary, s.message_count as messageCount,
            s.subagent_count as subagentCount, s.created, s.modified,
            s.git_branch as gitBranch, s.project_path as projectPath, s.user, s.hidden
