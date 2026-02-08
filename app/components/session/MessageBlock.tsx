@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ParsedMessage, ContentBlock } from "~/lib/types";
@@ -112,8 +113,13 @@ export function MessageBlock({
 
   const displayName = isUser ? (userName || "You") : (assistantLabel || "Assistant");
 
+  const copyPermalink = useCallback(() => {
+    const url = `${window.location.pathname}${window.location.search}#msg-${message.uuid}`;
+    navigator.clipboard.writeText(`${window.location.origin}${url}`);
+  }, [message.uuid]);
+
   const header = !isContinuation && (
-    <div className="flex items-center gap-2 mb-1 -ml-2">
+    <div className="flex items-center gap-2 mb-1 -ml-2 group/header">
       <span className={isUser ? "section-label text-ink" : "section-label text-slate/60"}>
         {displayName}
       </span>
@@ -122,6 +128,13 @@ export function MessageBlock({
           {formatModelName(message.model)}
         </span>
       )}
+      <button
+        onClick={copyPermalink}
+        className="text-xs text-slate/30 hover:text-teal opacity-0 group-hover/header:opacity-100 transition-opacity cursor-pointer"
+        title="Copy link to message"
+      >
+        #
+      </button>
       {message.timestamp && (
         <span className="text-xs text-slate/50 ml-auto">{formatTimestamp(message.timestamp)}</span>
       )}

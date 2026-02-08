@@ -206,12 +206,13 @@ export function InfiniteMessageList({
       return; // Will re-run after render with more messages
     }
 
-    const el = document.getElementById(`msg-${scrollToIndex}`);
+    const targetUuid = effectiveMessages[scrollToIndex]?.uuid;
+    const el = targetUuid ? document.getElementById(`msg-${targetUuid}`) : null;
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
       onScrollComplete();
     }
-  }, [scrollToIndex, renderedCount, effectiveMessages.length, onScrollComplete]);
+  }, [scrollToIndex, renderedCount, effectiveMessages.length, onScrollComplete, effectiveMessages]);
 
   return (
     <div ref={containerRef} className="space-y-6">
@@ -221,7 +222,7 @@ export function InfiniteMessageList({
         const isConsumed = consumedUuids.has(message.uuid);
 
         return (
-          <div key={message.uuid} id={`msg-${i}`}>
+          <div key={message.uuid} id={`msg-${message.uuid}`}>
             <div
               className={
                 isAlternate

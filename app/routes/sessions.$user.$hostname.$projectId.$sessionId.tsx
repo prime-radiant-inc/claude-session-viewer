@@ -152,6 +152,18 @@ export default function SessionDetail() {
     setPathSelections({});
   }, [data.sessionId]);
 
+  // Permalink: scroll to message referenced by URL hash
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (!hash.startsWith("#msg-")) return;
+    const uuid = hash.slice(5); // strip "#msg-"
+    const index = data.messages.findIndex((m) => m.uuid === uuid);
+    if (index >= 0) {
+      setScrollToIndex(index);
+    }
+  }, [data.messages]);
+
   const toggleToolCalls = useCallback(() => {
     setShowToolCalls((prev) => {
       const next = !prev;
