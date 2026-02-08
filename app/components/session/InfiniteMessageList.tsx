@@ -92,15 +92,25 @@ export function InfiniteMessageList({
     return { toolResultMap: map, consumedUuids: consumed };
   }, [effectiveMessages]);
 
-  // Compute continuation flags. A new turn starts when a non-tool-result
-  // user message appears. Everything else is a continuation of the current turn.
+  // Compute continuation flags. A turn boundary occurs at:
+  // - A real user message (not tool_result) → new user turn
+  // - The first assistant message after a real user message → new assistant turn
+  // Everything else (tool results, subsequent assistant messages) is a continuation.
   const continuationFlags = useMemo(() => {
     const flags: boolean[] = new Array(effectiveMessages.length).fill(false);
+    let expectAssistantHeader = false;
     for (let i = 1; i < effectiveMessages.length; i++) {
       const msg = effectiveMessages[i];
       const isRealUserMessage = msg.type === "user" && !msg.isToolResult;
-      // A real user message is never a continuation — it starts a new turn
-      flags[i] = !isRealUserMessage;
+      if (isRealUserMessage) {
+        flags[i] = false;
+        expectAssistantHeader = true;
+      } else if (expectAssistantHeader && msg.type === "assistant") {
+        flags[i] = false;
+        expectAssistantHeader = false;
+      } else {
+        flags[i] = true;
+      }
     }
     return flags;
   }, [effectiveMessages]);

@@ -5,6 +5,7 @@ function ExpandableString({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   const display = expanded ? text : text.slice(0, 500);
   const canExpand = text.length > 500;
+  const remainingLines = text.slice(500).split("\n").length;
 
   return (
     <span className="text-ink-light whitespace-pre-wrap break-words">
@@ -12,17 +13,17 @@ function ExpandableString({ text }: { text: string }) {
       {canExpand && !expanded && (
         <button
           onClick={() => setExpanded(true)}
-          className="text-teal hover:text-ink ml-1 cursor-pointer"
+          className="block text-teal hover:text-ink mt-1 cursor-pointer"
         >
-          ...show all
+          show {remainingLines.toLocaleString()} more lines
         </button>
       )}
       {canExpand && expanded && (
         <button
           onClick={() => setExpanded(false)}
-          className="text-teal hover:text-ink ml-1 cursor-pointer"
+          className="block text-teal hover:text-ink mt-1 cursor-pointer"
         >
-          [collapse]
+          collapse
         </button>
       )}
     </span>

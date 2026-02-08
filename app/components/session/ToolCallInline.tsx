@@ -32,19 +32,21 @@ function resultText(result: ToolResult): string {
     .join("\n");
 }
 
-/** Truncate text to maxLines, returning [text, wasTruncated]. */
-function truncate(text: string, maxLines: number): [string, boolean] {
+/** Truncate text to maxLines, returning [truncated, totalLines]. */
+function truncate(text: string, maxLines: number): [string, number] {
   const lines = text.split("\n");
-  if (lines.length <= maxLines) return [text, false];
-  return [lines.slice(0, maxLines).join("\n"), true];
+  if (lines.length <= maxLines) return [text, lines.length];
+  return [lines.slice(0, maxLines).join("\n"), lines.length];
 }
 
 function ResultBox({ text, isError, maxLines = 25 }: { text: string; isError?: boolean; maxLines?: number }) {
   const [expanded, setExpanded] = useState(false);
   if (!text.trim()) return null;
   const masked = maskSecrets(text);
-  const [truncated, wasTruncated] = truncate(masked, maxLines);
+  const [truncated, totalLines] = truncate(masked, maxLines);
+  const wasTruncated = totalLines > maxLines;
   const display = expanded ? masked : truncated;
+  const remainingLines = totalLines - maxLines;
 
   return (
     <pre className={`text-xs whitespace-pre-wrap break-words mt-1 px-2.5 py-1.5 rounded-lg ${
@@ -54,9 +56,9 @@ function ResultBox({ text, isError, maxLines = 25 }: { text: string; isError?: b
       {wasTruncated && !expanded && (
         <button
           onClick={() => setExpanded(true)}
-          className="text-teal hover:text-ink ml-1 cursor-pointer"
+          className="block text-teal hover:text-ink mt-1 cursor-pointer"
         >
-          ...show all
+          show {remainingLines.toLocaleString()} more lines
         </button>
       )}
       {expanded && wasTruncated && (
