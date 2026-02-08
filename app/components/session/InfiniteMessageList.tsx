@@ -98,7 +98,8 @@ export function InfiniteMessageList({
   // Everything else (tool results, subsequent assistant messages) is a continuation.
   const continuationFlags = useMemo(() => {
     const flags: boolean[] = new Array(effectiveMessages.length).fill(false);
-    let expectAssistantHeader = false;
+    const first = effectiveMessages[0];
+    let expectAssistantHeader = first?.type === "user" && !first?.isToolResult;
     for (let i = 1; i < effectiveMessages.length; i++) {
       const msg = effectiveMessages[i];
       const isRealUserMessage = msg.type === "user" && !msg.isToolResult;

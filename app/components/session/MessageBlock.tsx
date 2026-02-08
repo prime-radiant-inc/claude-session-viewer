@@ -113,28 +113,31 @@ export function MessageBlock({
 
   const displayName = isUser ? (userName || "You") : "Assistant";
 
-  return (
-    <div className={isUser ? "bg-white -mx-3 px-3 py-2 rounded-lg shadow-sm border border-edge/30" : ""}>
-      {/* Role label — hidden on continuation */}
-      {!isContinuation && (
-        <div className="flex items-center gap-2 mb-1 -ml-2">
-          <span className={isUser ? "section-label text-ink" : "section-label text-slate/60"}>
-            {displayName}
-          </span>
-          {!isUser && message.model && (
-            <span className="text-xs text-slate/50">
-              {formatModelName(message.model)}
-            </span>
-          )}
-          {message.timestamp && (
-            <span className="text-xs text-slate/50 ml-auto">{formatTimestamp(message.timestamp)}</span>
-          )}
-        </div>
+  const header = !isContinuation && (
+    <div className="flex items-center gap-2 mb-1 -ml-2">
+      <span className={isUser ? "section-label text-ink" : "section-label text-slate/60"}>
+        {displayName}
+      </span>
+      {!isUser && message.model && (
+        <span className="text-xs text-slate/50">
+          {formatModelName(message.model)}
+        </span>
       )}
+      {message.timestamp && (
+        <span className="text-xs text-slate/50 ml-auto">{formatTimestamp(message.timestamp)}</span>
+      )}
+    </div>
+  );
 
-      {/* Content blocks */}
-      <div className="space-y-2">
-        {message.content.map((block, i) => renderContentBlock(block, i, ctx))}
+  return (
+    <div>
+      {/* Role label sits above the card for user messages */}
+      {isUser && header}
+      <div className={isUser ? "bg-white -mx-3 px-3 py-2 rounded-lg shadow-sm border border-edge/30" : ""}>
+        {!isUser && header}
+        <div className="space-y-2">
+          {message.content.map((block, i) => renderContentBlock(block, i, ctx))}
+        </div>
       </div>
     </div>
   );
