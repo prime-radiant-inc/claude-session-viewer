@@ -221,6 +221,39 @@ describe("discoverUserProjects", () => {
     const child = projects.find((p) => p.dirId.includes("-Users-jesse-Documents-GitHub-lace"));
     expect(child!.name).toBe("lace");
   });
+
+  it("strips leading hyphens from dot-directory suffixes after prefix matching", async () => {
+    const hostDir = path.join(multiUserDir, "jesse", "paradise-park");
+    // -Users-jesse is a prefix, --clank is .clank (dot-dir)
+    mkdirSync(path.join(hostDir, "-Users-jesse"), { recursive: true });
+    writeFileSync(path.join(hostDir, "-Users-jesse", "aaa-111.jsonl"), '{"type":"user"}\n');
+    mkdirSync(path.join(hostDir, "-Users-jesse--clank"), { recursive: true });
+    writeFileSync(path.join(hostDir, "-Users-jesse--clank", "bbb-222.jsonl"), '{"type":"user"}\n');
+    const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"), "jesse", "paradise-park");
+    const clank = projects.find((p) => p.dirId.includes("--clank"));
+    expect(clank).toBeDefined();
+    expect(clank!.name).toBe("clank");
+  });
+
+  it("filters out .worktrees directories", async () => {
+    const hostDir = path.join(multiUserDir, "jesse", "paradise-park");
+    mkdirSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace"), { recursive: true });
+    writeFileSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace", "aaa-111.jsonl"), '{"type":"user"}\n');
+    // .worktrees dir and a worktree checkout inside it
+    mkdirSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace--worktrees"), { recursive: true });
+    writeFileSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace--worktrees", "bbb-222.jsonl"), '{"type":"user"}\n');
+    mkdirSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace--worktrees-admin-crud"), { recursive: true });
+    writeFileSync(path.join(hostDir, "-Users-jesse-Documents-GitHub-lace--worktrees-admin-crud", "ccc-333.jsonl"), '{"type":"user"}\n');
+    const projects = await discoverUserProjects(path.join(multiUserDir, "jesse"), "jesse", "paradise-park");
+    const names = projects.map((p) => p.name);
+    expect(names).not.toContain("worktrees");
+    expect(names).not.toContain("worktrees-admin-crud");
+    expect(names).not.toContain("-worktrees");
+    expect(names).not.toContain("-worktrees-admin-crud");
+    // The parent lace project should still be there
+    const lace = projects.find((p) => p.dirId.includes("-Users-jesse-Documents-GitHub-lace") && !p.dirId.includes("worktrees"));
+    expect(lace).toBeDefined();
+  });
 });
 
 describe("detectLayout", () => {

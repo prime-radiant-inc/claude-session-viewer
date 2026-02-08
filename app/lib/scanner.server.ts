@@ -128,31 +128,41 @@ export async function discoverHosts(userDir: string): Promise<string[]> {
 export async function discoverUserProjects(userDir: string, user: string, hostname: string): Promise<ProjectInfo[]> {
   const hostDir = path.join(userDir, hostname);
   const entries = await readdir(hostDir, { withFileTypes: true });
-  const projects: ProjectInfo[] = [];
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    projects.push({
-      dirId: `${user}/${hostname}/${entry.name}`,
-      name: entry.name.startsWith("-") ? parseProjectName(entry.name) : entry.name,
-      path: path.join(hostDir, entry.name),
-    });
-  }
-
-  // Prefix matching on encoded dirs: if one encoded dirName is a prefix of
-  // another (with "-" separator), the longer one's name is just the suffix.
   const encodedDirNames = entries
     .filter((e) => e.isDirectory() && e.name.startsWith("-"))
     .map((e) => e.name)
     .sort();
-  for (const p of projects) {
-    const dirName = p.dirId.split("/").pop()!;
-    if (!dirName.startsWith("-")) continue;
-    for (const prefix of encodedDirNames) {
-      if (prefix !== dirName && dirName.startsWith(prefix + "-")) {
-        p.name = dirName.slice(prefix.length + 1);
+
+  const projects: ProjectInfo[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dirName = entry.name;
+
+    // Filter out .worktrees directories (encoded as --worktrees)
+    if (dirName.includes("--worktrees")) continue;
+
+    let name: string;
+    if (dirName.startsWith("-")) {
+      // Start with parseProjectName, then try prefix matching for a better name
+      name = parseProjectName(dirName);
+      for (const prefix of encodedDirNames) {
+        if (prefix !== dirName && dirName.startsWith(prefix + "-")) {
+          // Extract suffix and strip leading hyphens from dot-dir encoding
+          let suffix = dirName.slice(prefix.length + 1);
+          while (suffix.startsWith("-")) suffix = suffix.slice(1);
+          if (suffix) name = suffix;
+        }
       }
+    } else {
+      name = dirName;
     }
+
+    projects.push({
+      dirId: `${user}/${hostname}/${dirName}`,
+      name,
+      path: path.join(hostDir, dirName),
+    });
   }
 
   return projects.sort((a, b) => a.name.localeCompare(b.name));
