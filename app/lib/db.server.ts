@@ -2,6 +2,8 @@ import Database from "better-sqlite3";
 import path from "path";
 import { discoverProjects, discoverSessions, discoverSubagents, readSessionsIndex, discoverUsers, discoverHosts, discoverUserProjects, detectLayout } from "./scanner.server";
 import { parseSessionFile, extractSummary, extractFirstPrompt } from "./parser.server";
+import { discoverCodexSessions } from "./codex-scanner.server";
+import { parseCodexSessionFile, extractCodexMetadata } from "./codex-parser.server";
 import type { SessionMeta } from "./types";
 
 export function createDb(dbPath: string): Database.Database {
@@ -68,6 +70,11 @@ export function createDb(dbPath: string): Database.Database {
   const sessionCols = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
   if (!sessionCols.some((c) => c.name === "hidden")) {
     db.exec("ALTER TABLE sessions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
+  }
+  // Re-read after potential hidden migration
+  const sessionCols2 = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+  if (!sessionCols2.some((c) => c.name === "agent")) {
+    db.exec("ALTER TABLE sessions ADD COLUMN agent TEXT NOT NULL DEFAULT 'claude'");
   }
 
   return db;
@@ -162,6 +169,63 @@ export async function importMultiUserDataDir(db: Database.Database, dataDir: str
   }
 }
 
+export async function importCodexSessions(db: Database.Database, codexDir: string): Promise<void> {
+  const sessionFiles = await discoverCodexSessions(codexDir);
+  if (sessionFiles.length === 0) return;
+
+  const upsertProject = db.prepare(`
+    INSERT INTO projects (dir_id, name, path, user, hostname, hidden) VALUES (?, ?, ?, '', '', ?)
+    ON CONFLICT(dir_id) DO UPDATE SET name=excluded.name, path=excluded.path
+  `);
+  const upsertSession = db.prepare(`
+    INSERT INTO sessions
+    (session_id, project_dir_id, first_prompt, summary, message_count, subagent_count,
+     created, modified, git_branch, project_path, file_path, file_mtime, user, agent)
+    VALUES (?, ?, ?, '', ?, 0, ?, ?, ?, ?, ?, ?, '', 'codex')
+    ON CONFLICT(session_id) DO UPDATE SET
+      project_dir_id=excluded.project_dir_id, first_prompt=excluded.first_prompt,
+      message_count=excluded.message_count, created=excluded.created,
+      modified=excluded.modified, git_branch=excluded.git_branch,
+      project_path=excluded.project_path, file_path=excluded.file_path,
+      file_mtime=excluded.file_mtime, agent=excluded.agent
+  `);
+  const getSessionMtime = db.prepare("SELECT file_mtime FROM sessions WHERE session_id = ?");
+  const seenDirIds = new Set<string>();
+
+  for (const fileInfo of sessionFiles) {
+    const mtime = fileInfo.mtime.getTime();
+    const sessionId = `codex:${fileInfo.sessionId}`;
+    const existing = getSessionMtime.get(sessionId) as { file_mtime: number } | undefined;
+    if (existing && existing.file_mtime >= mtime) continue;
+
+    const entries = await parseCodexSessionFile(fileInfo.filePath);
+    const meta = extractCodexMetadata(entries);
+
+    // Skip automated sessions
+    if (meta.originator === "codex_exec") continue;
+
+    // Derive project name from cwd
+    const projectName = meta.cwd ? path.basename(meta.cwd) : "unknown";
+    const dirId = `codex:${projectName}`;
+
+    if (!seenDirIds.has(dirId)) {
+      upsertProject.run(dirId, projectName, meta.cwd || "", shouldAutoHide(projectName) ? 1 : 0);
+      seenDirIds.add(dirId);
+    }
+
+    // Count user + assistant messages (event_msg user_message + agent_message)
+    const messageCount = entries.filter((e) =>
+      e.type === "event_msg" && (e.payload.type === "user_message" || e.payload.type === "agent_message"),
+    ).length;
+
+    upsertSession.run(
+      sessionId, dirId, meta.firstPrompt, messageCount,
+      meta.created, meta.modified, meta.gitBranch, meta.cwd || "",
+      fileInfo.filePath, mtime,
+    );
+  }
+}
+
 export function getProjects(db: Database.Database, user?: string, hostname?: string, includeHidden = false): Array<{ name: string; sessionCount: number; hidden: number }> {
   const conditions: string[] = [];
   const params: (string | number)[] = [];
@@ -202,17 +266,18 @@ export function getSessionsByProject(db: Database.Database, projectName: string,
            (SELECT hostname FROM projects WHERE dir_id = project_dir_id) as hostname,
            first_prompt as firstPrompt, summary, message_count as messageCount,
            subagent_count as subagentCount, created, modified,
-           git_branch as gitBranch, project_path as projectPath, user, hidden
+           git_branch as gitBranch, project_path as projectPath, user, hidden, agent
     FROM sessions WHERE project_dir_id IN (SELECT dir_id FROM projects WHERE name = ?)${hiddenFilter}
     ORDER BY modified DESC LIMIT ? OFFSET ?
   `).all(projectName, limit, offset) as SessionMeta[];
 }
 
-export function getAllSessions(db: Database.Database, limit = 100, offset = 0, user?: string, includeHidden = false): SessionMeta[] {
+export function getAllSessions(db: Database.Database, limit = 100, offset = 0, user?: string, includeHidden = false, agent?: string): SessionMeta[] {
   const conditions: string[] = [];
   const params: (string | number)[] = [];
   if (!includeHidden) { conditions.push("hidden = 0"); }
   if (user) { conditions.push("user = ?"); params.push(user); }
+  if (agent) { conditions.push("agent = ?"); params.push(agent); }
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   return db.prepare(`
     SELECT session_id as sessionId, project_dir_id as projectId,
@@ -220,7 +285,7 @@ export function getAllSessions(db: Database.Database, limit = 100, offset = 0, u
            (SELECT hostname FROM projects WHERE dir_id = project_dir_id) as hostname,
            first_prompt as firstPrompt, summary, message_count as messageCount,
            subagent_count as subagentCount, created, modified,
-           git_branch as gitBranch, project_path as projectPath, user, hidden
+           git_branch as gitBranch, project_path as projectPath, user, hidden, agent
     FROM sessions ${where} ORDER BY modified DESC LIMIT ? OFFSET ?
   `).all(...params, limit, offset) as SessionMeta[];
 }
@@ -236,7 +301,7 @@ export function searchSessions(db: Database.Database, query: string, limit = 50,
            (SELECT hostname FROM projects WHERE dir_id = s.project_dir_id) as hostname,
            s.first_prompt as firstPrompt, s.summary, s.message_count as messageCount,
            s.subagent_count as subagentCount, s.created, s.modified,
-           s.git_branch as gitBranch, s.project_path as projectPath, s.user, s.hidden
+           s.git_branch as gitBranch, s.project_path as projectPath, s.user, s.hidden, s.agent
     FROM sessions_fts fts JOIN sessions s ON s.session_id = fts.session_id
     WHERE ${conditions.join(" AND ")} ORDER BY rank LIMIT ?
   `).all(...params, limit) as SessionMeta[];
@@ -274,7 +339,11 @@ async function importDataDir(db: Database.Database, dataDir: string): Promise<vo
 async function initDb(): Promise<void> {
   const dataDir = process.env.DATA_DIR;
   if (!dataDir) throw new Error("DATA_DIR environment variable is required");
-  await importDataDir(getDb(), dataDir);
+  const db = getDb();
+  await importDataDir(db, dataDir);
+
+  const codexDir = process.env.CODEX_DATA_DIR || path.join(process.env.HOME || "~", ".codex");
+  await importCodexSessions(db, codexDir);
 }
 
 export function setSessionHidden(db: Database.Database, sessionId: string, hidden: boolean): void {
@@ -290,6 +359,10 @@ export function setProjectHidden(db: Database.Database, projectName: string, hid
 export async function rescanDb(): Promise<void> {
   const dataDir = process.env.DATA_DIR;
   if (!dataDir) throw new Error("DATA_DIR environment variable is required");
-  await importDataDir(getDb(), dataDir);
+  const db = getDb();
+  await importDataDir(db, dataDir);
+
+  const codexDir = process.env.CODEX_DATA_DIR || path.join(process.env.HOME || "~", ".codex");
+  await importCodexSessions(db, codexDir);
   _initPromise = Promise.resolve();
 }

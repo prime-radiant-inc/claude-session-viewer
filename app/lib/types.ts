@@ -104,6 +104,7 @@ export interface SessionMeta {
   user: string;
   hostname: string;
   hidden: boolean;
+  agent: string;
 }
 
 export interface ParsedMessage {

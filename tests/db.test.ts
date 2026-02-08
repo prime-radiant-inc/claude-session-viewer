@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
-import { createDb, importFromDataDir, importMultiUserDataDir, searchSessions, getSessionsByProject, getProjects, getUsers, getAllSessions, setSessionHidden, setProjectHidden, shouldAutoHide } from "~/lib/db.server";
+import { createDb, importFromDataDir, importMultiUserDataDir, importCodexSessions, searchSessions, getSessionsByProject, getProjects, getUsers, getAllSessions, setSessionHidden, setProjectHidden, shouldAutoHide } from "~/lib/db.server";
 import type Database from "better-sqlite3";
 
 let testDir: string;
@@ -402,5 +402,163 @@ describe("auto-hide on import", () => {
     await importFromDataDir(db, testDir);
     const row = db.prepare("SELECT hidden FROM projects WHERE name = 'tmp'").get() as { hidden: number };
     expect(row.hidden).toBe(0);
+  });
+});
+
+// =============================================================================
+// Agent column migration
+// =============================================================================
+
+describe("agent column migration", () => {
+  it("adds agent column to sessions table", () => {
+    const cols = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+    expect(cols.map((c) => c.name)).toContain("agent");
+  });
+
+  it("defaults agent to 'claude'", () => {
+    db.prepare("INSERT INTO projects (dir_id, name, path) VALUES ('test', 'test', '/test')").run();
+    db.prepare("INSERT INTO sessions (session_id, project_dir_id) VALUES ('s1', 'test')").run();
+    const row = db.prepare("SELECT agent FROM sessions WHERE session_id = 's1'").get() as { agent: string };
+    expect(row.agent).toBe("claude");
+  });
+});
+
+// =============================================================================
+// Codex import
+// =============================================================================
+
+describe("importCodexSessions", () => {
+  let codexDir: string;
+
+  beforeEach(() => {
+    codexDir = mkdtempSync(path.join(tmpdir(), "se-codex-import-"));
+    const dayDir = path.join(codexDir, "sessions", "2026", "02", "03");
+    mkdirSync(dayDir, { recursive: true });
+    // Interactive session
+    writeFileSync(path.join(dayDir, "rollout-2026-02-03T00-02-31-019c2286-484a-7550-b53b-cd4e1fd7c5e4.jsonl"),
+      '{"timestamp":"2026-02-03T08:02:31.655Z","type":"session_meta","payload":{"id":"019c2286-484a-7550-b53b-cd4e1fd7c5e4","cwd":"/Users/jesse/my-project","originator":"codex_cli_rs","git":{"branch":"main"}}}\n' +
+      '{"timestamp":"2026-02-03T08:02:31.660Z","type":"event_msg","payload":{"type":"user_message","message":"Fix the login bug"}}\n' +
+      '{"timestamp":"2026-02-03T08:02:33.377Z","type":"turn_context","payload":{"model":"gpt-5.2-codex"}}\n' +
+      '{"timestamp":"2026-02-03T08:02:55.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Fixed it."}}\n',
+    );
+    // codex_exec session (should be skipped)
+    writeFileSync(path.join(dayDir, "rollout-2026-02-03T10-00-00-019c2286-exec-7550-b53b-cd4e1fd7c5e4.jsonl"),
+      '{"timestamp":"2026-02-03T10:00:00.000Z","type":"session_meta","payload":{"id":"019c2286-exec-7550-b53b-cd4e1fd7c5e4","cwd":"/tmp/automated","originator":"codex_exec"}}\n' +
+      '{"timestamp":"2026-02-03T10:00:01.000Z","type":"event_msg","payload":{"type":"user_message","message":"Run tests"}}\n',
+    );
+  });
+
+  afterEach(() => { rmSync(codexDir, { recursive: true, force: true }); });
+
+  it("imports interactive Codex sessions", async () => {
+    await importCodexSessions(db, codexDir);
+    const sessions = getAllSessions(db, 100, 0, undefined, true);
+    const codexSessions = sessions.filter((s) => s.sessionId.startsWith("codex:"));
+    expect(codexSessions.length).toBe(1);
+  });
+
+  it("skips codex_exec sessions", async () => {
+    await importCodexSessions(db, codexDir);
+    const sessions = getAllSessions(db, 100, 0, undefined, true);
+    const execSessions = sessions.filter((s) => s.sessionId.includes("exec"));
+    expect(execSessions.length).toBe(0);
+  });
+
+  it("prefixes session IDs with codex:", async () => {
+    await importCodexSessions(db, codexDir);
+    const sessions = getAllSessions(db, 100, 0, undefined, true);
+    const codexSession = sessions.find((s) => s.sessionId.startsWith("codex:"));
+    expect(codexSession).toBeDefined();
+    expect(codexSession!.sessionId).toBe("codex:019c2286-484a-7550-b53b-cd4e1fd7c5e4");
+  });
+
+  it("sets agent to codex", async () => {
+    await importCodexSessions(db, codexDir);
+    const row = db.prepare("SELECT agent FROM sessions WHERE session_id LIKE 'codex:%'").get() as { agent: string } | undefined;
+    expect(row).toBeDefined();
+    expect(row!.agent).toBe("codex");
+  });
+
+  it("derives project name from cwd", async () => {
+    await importCodexSessions(db, codexDir);
+    const projects = getProjects(db);
+    expect(projects.some((p) => p.name === "my-project")).toBe(true);
+  });
+
+  it("extracts first prompt", async () => {
+    await importCodexSessions(db, codexDir);
+    const sessions = getAllSessions(db, 100, 0, undefined, true);
+    const codexSession = sessions.find((s) => s.sessionId.startsWith("codex:"));
+    expect(codexSession!.firstPrompt).toBe("Fix the login bug");
+  });
+
+  it("extracts git branch", async () => {
+    await importCodexSessions(db, codexDir);
+    const sessions = getAllSessions(db, 100, 0, undefined, true);
+    const codexSession = sessions.find((s) => s.sessionId.startsWith("codex:"));
+    expect(codexSession!.gitBranch).toBe("main");
+  });
+
+  it("skips unchanged files on reimport", async () => {
+    await importCodexSessions(db, codexDir);
+    // Re-import should not error and session should still be there
+    await importCodexSessions(db, codexDir);
+    const sessions = getAllSessions(db, 100, 0, undefined, true);
+    const codexSessions = sessions.filter((s) => s.sessionId.startsWith("codex:"));
+    expect(codexSessions.length).toBe(1);
+  });
+
+  it("includes agent field in session metadata", async () => {
+    await importCodexSessions(db, codexDir);
+    const sessions = getAllSessions(db, 100, 0, undefined, true);
+    const codexSession = sessions.find((s) => s.sessionId.startsWith("codex:"));
+    expect(codexSession!.agent).toBe("codex");
+  });
+
+  it("returns empty gracefully for nonexistent codex dir", async () => {
+    await importCodexSessions(db, "/nonexistent/path");
+    const sessions = getAllSessions(db, 100, 0, undefined, true);
+    const codexSessions = sessions.filter((s) => s.sessionId.startsWith("codex:"));
+    expect(codexSessions.length).toBe(0);
+  });
+});
+
+describe("mixed agent queries", () => {
+  let codexDir: string;
+
+  beforeEach(async () => {
+    // Import Claude sessions from testDir (setup in outer beforeEach)
+    await importFromDataDir(db, testDir);
+
+    // Set up and import Codex sessions
+    codexDir = mkdtempSync(path.join(tmpdir(), "se-mixed-"));
+    const dayDir = path.join(codexDir, "sessions", "2026", "02", "03");
+    mkdirSync(dayDir, { recursive: true });
+    writeFileSync(path.join(dayDir, "rollout-2026-02-03T00-02-31-019c2286-484a-7550-b53b-cd4e1fd7c5e4.jsonl"),
+      '{"timestamp":"2026-02-03T08:02:31.655Z","type":"session_meta","payload":{"id":"019c2286-484a-7550-b53b-cd4e1fd7c5e4","cwd":"/Users/jesse/my-project","originator":"codex_cli_rs"}}\n' +
+      '{"timestamp":"2026-02-03T08:02:31.660Z","type":"event_msg","payload":{"type":"user_message","message":"Codex task: build something"}}\n' +
+      '{"timestamp":"2026-02-03T08:02:55.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Done building."}}\n',
+    );
+    await importCodexSessions(db, codexDir);
+  });
+
+  afterEach(() => { rmSync(codexDir, { recursive: true, force: true }); });
+
+  it("getAllSessions returns both Claude and Codex sessions", () => {
+    const sessions = getAllSessions(db);
+    expect(sessions.length).toBe(3); // 2 Claude + 1 Codex
+  });
+
+  it("getAllSessions can filter by agent", () => {
+    const claudeSessions = getAllSessions(db, 100, 0, undefined, false, "claude");
+    expect(claudeSessions.length).toBe(2);
+    const codexSessions = getAllSessions(db, 100, 0, undefined, false, "codex");
+    expect(codexSessions.length).toBe(1);
+  });
+
+  it("searchSessions finds Codex sessions by content", () => {
+    const results = searchSessions(db, "Codex task");
+    expect(results.length).toBe(1);
+    expect(results[0].agent).toBe("codex");
   });
 });
