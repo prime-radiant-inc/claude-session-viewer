@@ -27,9 +27,16 @@ export function SessionCard({ session, showUser, admin }: { session: SessionMeta
     revalidator.revalidate();
   }
 
+  // In multi-user layout, projectId (dir_id) is "user/hostname/dirName" but
+  // user and hostname are already separate URL segments, so strip the prefix.
+  const prefix = session.user && session.hostname ? `${session.user}/${session.hostname}/` : "";
+  const dirName = prefix && session.projectId.startsWith(prefix)
+    ? session.projectId.slice(prefix.length)
+    : session.projectId;
+
   return (
     <Link
-      to={`/sessions/${session.user || "_"}/${session.hostname || "_"}/${session.projectId}/${session.sessionId}`}
+      to={`/sessions/${session.user || "_"}/${session.hostname || "_"}/${dirName}/${session.sessionId}`}
       className={`card block px-4 py-3 ${isHidden ? "opacity-40" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">

@@ -49,6 +49,8 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   const dirId = session.project_dir_id;
   const isCodex = session.agent === "codex";
+  const projectRow = db.prepare("SELECT name FROM projects WHERE dir_id = ?").get(dirId) as { name: string } | undefined;
+  const projectName = projectRow?.name ?? dirId;
 
   let messages: ParsedMessage[];
   let branchPoints: BranchPoint[];
@@ -116,6 +118,7 @@ export async function loader({ params }: Route.LoaderArgs) {
   return {
     sessionId,
     projectId: dirId,
+    projectName,
     user: effectiveUser,
     agent: session.agent,
     firstPrompt: session.first_prompt,
@@ -204,7 +207,7 @@ export default function SessionDetail() {
       <div className="pr-20">
         <div className="max-w-4xl mx-auto px-6 py-6">
           {/* Back link */}
-          <Link to={`/?user=${data.user}&project=${data.projectId}`} className="link-back inline-block mb-4">
+          <Link to={`/?user=${data.user}&project=${data.projectName}`} className="link-back inline-block mb-4">
             &larr; Back to sessions
           </Link>
 
